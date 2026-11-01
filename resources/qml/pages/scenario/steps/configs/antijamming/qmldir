@@ -1,0 +1,12 @@
+ContinuousWaveConfig 1.0 ContinuousWaveConfig.qml
+PulseSignalConfig 1.0 PulseSignalConfig.qml
+WhiteNoiseConfig 1.0 WhiteNoiseConfig.qml
+AmSignalConfig 1.0 AmSignalConfig.qml
+SpreadSpectrumConfig 1.0 SpreadSpectrumConfig.qml
+SweepFreqConfig 1.0 SweepFreqConfig.qml
+FmSignalConfig 1.0 FmSignalConfig.qml
+DeceptionPositionConfig 1.0 DeceptionPositionConfig.qml
+JammingDeceptionParamsConfig 1.0 JammingDeceptionParamsConfig.qml
+DeceptionRebootConfig 1.0 DeceptionRebootConfig.qml
+JammerCountConfig 1.0 JammerCountConfig.qml
+JammingParamsConfig 1.0 JammingParamsConfig.qml

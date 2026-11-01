@@ -1,0 +1,118 @@
+<RCC>
+    <!-- Updated: force refresh 2026-04-15 -->
+    <qresource prefix="/">
+        <file>resources/qml/qmldir</file>
+        <file>resources/qml/main.qml</file>
+        <file>resources/qml/LoginScreen.qml</file>
+        <file>resources/qml/AppShell.qml</file>
+        <file>resources/qml/ManagementContainer.qml</file>
+        <file>resources/qml/pages/PlaceholderPage.qml</file>
+        <file>resources/qml/pages/DeviceManagementPage.qml</file>
+        <file>resources/qml/pages/qmldir</file>
+        <file>resources/qml/pages/UserManagementPage.qml</file>
+        <file>resources/qml/pages/ScenarioManagementPage.qml</file>
+        <file>resources/qml/pages/scenario/SceneListView.qml</file>
+        <file>resources/qml/pages/scenario/SceneDetailPage.qml</file>
+        <file>resources/qml/pages/scenario/SceneEditorDialog.qml</file>
+        <file>resources/qml/pages/scenario/DeleteConfirmDialog.qml</file>
+        <file>resources/qml/pages/scenario/qmldir</file>
+        <file>resources/qml/pages/scenario/steps/qmldir</file>
+        <file>resources/qml/pages/scenario/steps/StepNavigation.qml</file>
+        <file>resources/qml/pages/scenario/steps/Step0_SimulationStart.qml</file>
+        <file>resources/qml/pages/scenario/steps/Step1_SimulatorConfig.qml</file>
+        <file>resources/qml/pages/scenario/steps/Step2_DeviceConfig.qml</file>
+        <file>resources/qml/pages/scenario/steps/Step3_Evaluation.qml</file>
+        <file>resources/qml/pages/scenario/steps/StepX_JammingSource.qml</file>
+        <file>resources/qml/pages/scenario/steps/JammingSignalGroup.qml</file>
+        <file>resources/qml/pages/scenario/steps/SatelliteNavDifferentialConfig.qml</file>
+        <file>resources/qml/pages/scenario/steps/MediumOrbitConfig.qml</file>
+        <file>resources/qml/pages/scenario/steps/JammingSourceConfig.qml</file>
+        <file>resources/qml/pages/scenario/steps/SecurityAuthForwardConfig.qml</file>
+        <file>resources/qml/pages/scenario/steps/DeceptionJammingSourceConfig.qml</file>
+        <file>resources/qml/pages/scenario/steps/configs/common/qmldir</file>
+        <file>resources/qml/pages/scenario/steps/configs/common/ScenePathConfig.qml</file>
+        <file>resources/qml/pages/scenario/steps/configs/common/InitConfig.qml</file>
+        <file>resources/qml/pages/scenario/steps/configs/common/StartConfig.qml</file>
+        <file>resources/qml/pages/scenario/steps/configs/common/StopConfig.qml</file>
+        <file>resources/qml/pages/scenario/steps/configs/common/TrackOutputConfig.qml</file>
+        <file>resources/qml/pages/scenario/steps/configs/common/SignalConfig24.qml</file>
+        <file>resources/qml/pages/scenario/steps/configs/common/SignalConfig36.qml</file>
+        <file>resources/qml/pages/scenario/steps/configs/common/SimulationErrorConfig.qml</file>
+        <file>resources/qml/pages/scenario/steps/configs/common/TargetTrackConfig.qml</file>
+        <file>resources/qml/pages/scenario/steps/configs/security/qmldir</file>
+        <file>resources/qml/pages/scenario/steps/configs/security/SecurityDeceptionParamsConfig.qml</file>
+        <file>resources/qml/pages/scenario/steps/configs/security/TrackConfig.qml</file>
+        <file>resources/qml/pages/scenario/steps/configs/antijamming/qmldir</file>
+        <file>resources/qml/pages/scenario/steps/configs/antijamming/ContinuousWaveConfig.qml</file>
+        <file>resources/qml/pages/scenario/steps/configs/antijamming/PulseSignalConfig.qml</file>
+        <file>resources/qml/pages/scenario/steps/configs/antijamming/WhiteNoiseConfig.qml</file>
+        <file>resources/qml/pages/scenario/steps/configs/antijamming/AmSignalConfig.qml</file>
+        <file>resources/qml/pages/scenario/steps/configs/antijamming/SpreadSpectrumConfig.qml</file>
+        <file>resources/qml/pages/scenario/steps/configs/antijamming/SweepFreqConfig.qml</file>
+        <file>resources/qml/pages/scenario/steps/configs/antijamming/FmSignalConfig.qml</file>
+        <file>resources/qml/pages/scenario/steps/configs/antijamming/DeceptionPositionConfig.qml</file>
+        <file>resources/qml/pages/scenario/steps/configs/antijamming/JammingDeceptionParamsConfig.qml</file>
+        <file>resources/qml/pages/scenario/steps/configs/antijamming/DeceptionRebootConfig.qml</file>
+        <file>resources/qml/pages/scenario/steps/configs/antijamming/JammerCountConfig.qml</file>
+        <file>resources/qml/pages/scenario/steps/configs/antijamming/JammingParamsConfig.qml</file>
+        <file>resources/qml/pages/CommandSetManagementPage.qml</file>
+        <file>resources/qml/pages/ScriptManagementPage.qml</file>
+        <file>resources/qml/pages/TaskMonitoringPage.qml</file>
+        <file>resources/qml/pages/AboutPage.qml</file>
+        <file>resources/qml/pages/DomeScenePage.qml</file>
+        <file>resources/qml/pages/DomeLightPanel.qml</file>
+        <file>resources/qml/pages/CabinetPage.qml</file>
+        <file>resources/qml/TileMapView.qml</file>
+        <file>resources/qml/SceneView.qml</file>
+        <file>resources/qml/SceneViewItem.qml</file>
+        <file>resources/qml/utils/UnitConverter.js</file>
+        <file>resources/qml/Map2DView.qml</file>
+        <file>resources/qml/components/EarthItem.qml</file>
+        <file>resources/qml/components/LeftDock.qml</file>
+        <file>resources/qml/components/RightDock.qml</file>
+        <file>resources/qml/components/PreviewConfirmDialog.qml</file>
+        <file>resources/qml/components/SceneViewOverlays.qml</file>
+        <file>resources/qml/components/SatelliteInstancer.qml</file>
+        <file>resources/qml/components/OrbitLine.qml</file>
+        <file>resources/qml/components/FloatingBall.qml</file>
+        <file>resources/qml/components/OrbitConfigPanel.qml</file>
+        <file>resources/qml/components/ParameterInput.qml</file>
+        <file>resources/qml/components/MoonItem.qml</file>
+        <file>resources/qml/components/GroundWarningItem.qml</file>
+        <file>resources/qml/components/GroundPointConfigPanel.qml</file>
+        <file>resources/qml/components/qmldir</file>
+        <file>resources/qml/components/PositionMarker.qml</file>
+        <file>resources/qml/components/ProbeTrajectory.qml</file>
+        <file>resources/qml/components/MissionStatusPanel.qml</file>
+        <file>resources/qml/components/LandingSiteMarker.qml</file>
+        <file>resources/qml/components/TransferOrbitView.qml</file>
+        <file>resources/qml/components/OrbitDebugPanel.qml</file>
+        <file>resources/qml/components/MoonTrajectoryItem.qml</file>
+        <file>resources/qml/components/AnimatedTrajectoryPoint.qml</file>
+        <file>resources/qml/components/MoonTrajectoryTestPanel.qml</file>
+        <file>resources/qml/components/DeceptionSignalItem.qml</file>
+        <file>resources/images/earth_color.jpg</file>
+        <file>resources/images/moon_color.jpg</file>
+        <file>resources/images/space_background.png</file>
+        <file>resources/images/logo_cetic.png</file>
+        <file alias="design/images/cc4b08cad0f7a71bfd3a5e6db46f30c6.png">resources/icons/nav_right_2_main4.png</file>
+        <file alias="icons/top_brand.png">resources/icons/top_brand.png</file>
+        <file alias="icons/nav_left_1_3d.png">resources/icons/nav_left_1_3d.png</file>
+        <file alias="icons/nav_left_2_2d_a.png">resources/icons/nav_left_2_2d_a.png</file>
+        <file alias="icons/nav_left_3_2d_b.png">resources/icons/nav_left_3_2d_b.png</file>
+        <file alias="icons/nav_left_4_reserved.png">resources/icons/nav_left_4_reserved.png</file>
+        <file alias="icons/nav_right_1_reserved.png">resources/icons/nav_right_1_reserved.png</file>
+        <file alias="icons/nav_right_2_main4.png">resources/icons/nav_right_2_main4.png</file>
+        <file alias="icons/nav_right_3_dome.png">resources/icons/nav_right_3_dome.png</file>
+        <file alias="icons/user.png">resources/icons/user.png</file>
+        <file>resources/models/satellite_diffuse.jpg</file>
+        <file>resources/models/maps/textureData.jpg</file>
+        <file>resources/models/qmldir</file>
+        <file>resources/models/Dome.qml</file>
+        <file>resources/models/DomeWithLights.qml</file>
+        <file>resources/models/Turntable.qml</file>
+        <file>resources/models/Satellite.qml</file>
+        <file>resources/config/trajectory_demo.json</file>
+        <file>resources/data/trajectory_earth_moon_full.json</file>
+    </qresource>
+</RCC>

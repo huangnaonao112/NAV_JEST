@@ -1,0 +1,48 @@
+# Build output
+build/
+bin/
+obj/
+moc/
+rcc/
+ui/
+
+# Qt Creator / IDE
+*.pro.user
+*.pro.user.*
+.qtc_clangd/
+*.qmake.stash
+.qmake.stash
+CMakeLists.txt.user*
+cmake-build-*/
+compile_commands.json
+
+# Compiled objects
+*.o
+*.obj
+*.exe
+*.dll
+*.lib
+*.a
+
+# Runtime data (large binaries, fetched separately)
+*.mbtiles
+
+# MySQL runtime DLLs (copied at deploy time)
+libmysql*.dll
+sqldrivers/
+
+# Deployment artifacts
+deploy/
+
+# Large model binaries stay out of git (460MB); keep small QML sources
+resources/models/meshes/
+resources/models/liangge/meshes/
+resources/models/liangge/maps/
+resources/models/*.mesh
+resources/models/*.jpg
+assets/model/*.glb
+assets/model/*.obj
+
+# Logs
+*.log
+logs/

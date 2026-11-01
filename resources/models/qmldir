@@ -1,0 +1,5 @@
+module models
+Dome 1.0 Dome.qml
+DomeWithLights 1.0 DomeWithLights.qml
+Turntable 1.0 Turntable.qml
+Satellite 1.0 Satellite.qml

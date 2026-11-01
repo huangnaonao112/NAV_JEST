@@ -1,0 +1,5 @@
+module scenario
+SceneListView 1.0 SceneListView.qml
+SceneDetailPage 1.0 SceneDetailPage.qml
+SceneEditorDialog 1.0 SceneEditorDialog.qml
+DeleteConfirmDialog 1.0 DeleteConfirmDialog.qml

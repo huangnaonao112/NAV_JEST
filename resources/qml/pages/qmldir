@@ -1,0 +1,11 @@
+module pages
+ScenarioManagementPage 1.0 ScenarioManagementPage.qml
+DomeScenePage 1.0 DomeScenePage.qml
+UserManagementPage 1.0 UserManagementPage.qml
+DeviceManagementPage 1.0 DeviceManagementPage.qml
+CabinetPage 1.0 CabinetPage.qml
+TaskMonitoringPage 1.0 TaskMonitoringPage.qml
+AboutPage 1.0 AboutPage.qml
+ScriptManagementPage 1.0 ScriptManagementPage.qml
+CommandSetManagementPage 1.0 CommandSetManagementPage.qml
+PlaceholderPage 1.0 PlaceholderPage.qml

@@ -1,0 +1,17 @@
+{
+    "database": {
+        "host": "localhost",
+        "port": 3306,
+        "user": "root",
+        "password": "lysk123",
+        "name": "11"
+    },
+    "server": {
+        "http_port": 18080,
+        "ws_port": 18081
+    },
+    "rack_client": {
+        "host": "127.0.0.1",
+        "port": 8000
+    }
+}

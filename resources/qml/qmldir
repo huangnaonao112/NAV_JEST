@@ -1,0 +1,8 @@
+module qml
+AppShell 1.0 AppShell.qml
+LoginScreen 1.0 LoginScreen.qml
+ManagementContainer 1.0 ManagementContainer.qml
+Map2DView 1.0 Map2DView.qml
+SceneView 1.0 SceneView.qml
+SceneViewItem 1.0 SceneViewItem.qml
+TileMapView 1.0 TileMapView.qml

@@ -1,0 +1,13 @@
+module steps
+StepNavigation 1.0 StepNavigation.qml
+Step0_SimulationStart 1.0 Step0_SimulationStart.qml
+Step1_SimulatorConfig 1.0 Step1_SimulatorConfig.qml
+Step2_DeviceConfig 1.0 Step2_DeviceConfig.qml
+Step3_Evaluation 1.0 Step3_Evaluation.qml
+StepX_JammingSource 1.0 StepX_JammingSource.qml
+JammingSignalGroup 1.0 JammingSignalGroup.qml
+SatelliteNavDifferentialConfig 1.0 SatelliteNavDifferentialConfig.qml
+MediumOrbitConfig 1.0 MediumOrbitConfig.qml
+JammingSourceConfig 1.0 JammingSourceConfig.qml
+SecurityAuthForwardConfig 1.0 SecurityAuthForwardConfig.qml
+DeceptionJammingSourceConfig 1.0 DeceptionJammingSourceConfig.qml
