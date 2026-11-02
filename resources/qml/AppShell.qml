@@ -555,13 +555,13 @@ Item {
             }
 
             // 监听窗口可见性变化（全屏/窗口切换）
-            Connections {
-                target: root.window
-                enabled: root.window !== null
-                function onVisibilityChanged() { 
-                    // 多次延迟更新，确保布局完全完成
-                    mapPointUpdateTimer.start()
-                }
+            // 说明：Connections 直接挂 onVisibilityChanged 在部分 Qt 版本下
+            // 解析不到 QWindow 信号（运行期告警且不生效）。改为绑定 visibility
+            // 属性，靠属性变更通知触发，行为稳定。
+            Item {
+                visible: false
+                property int winVisibility: root.window ? root.window.visibility : 0
+                onWinVisibilityChanged: mapPointUpdateTimer.start()
             }
 
             // 延迟更新定时器，确保布局完成后再计算位置

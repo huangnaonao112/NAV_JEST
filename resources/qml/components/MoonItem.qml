@@ -19,6 +19,9 @@ Node {
     
     // 月球在场景中的 X 位置（空间 2 的摆位，尺度见 CoordinateSystem）
     readonly property real moonCenterX: CoordinateSystem.moonSceneX
+
+    // 线宽随相机距离等比缩放系数（父级 SceneViewItem 注入，保持屏幕观感恒定）
+    property real lineWidthScale: 1.0
     
     // ========== 报文点轨迹线（红色，TrajectoryLineGeometry 交叉ribbon）==========
     Node {
@@ -33,7 +36,7 @@ Node {
                 id: messageTrajectoryGeometry
                 // 月面局部坐标单位为 km（1 场景单位 = 1 km），线宽同为 km
                 // 具体数值由 CoordinateSystem 统一定义（30 km ≈ 1~2 px）
-                thickness: CoordinateSystem.moonTrailThicknessKm
+                thickness: CoordinateSystem.moonTrailThicknessKm * moonNode.lineWidthScale
             }
 
             materials: DefaultMaterial {

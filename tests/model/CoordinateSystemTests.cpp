@@ -21,6 +21,7 @@ private slots:
     void thicknessConstantsAreInPlausibleRange();
     void thicknessSanityGuardRejectsKnownBadValues();
     void displaySpaceRoundTrip();
+    void cameraDistancesAreSane();
 };
 
 void CoordinateSystemTests::spherePrimitiveRadiusIsQmlDefault()
@@ -94,6 +95,18 @@ void CoordinateSystemTests::displaySpaceRoundTrip()
 
     const QVector3D back = CoordinateSystem::toRealKm(display);
     QVERIFY(qAbs(back.x() - realKm.x()) < 0.5f);
+}
+
+void CoordinateSystemTests::cameraDistancesAreSane()
+{
+    // 线宽自适应以 DEFAULT_CAMERA_DISTANCE 为基准：它必须与 QML 默认视距一致，
+    // 否则默认视角下线宽会整体偏粗/偏细（会直接看出观感回归）。
+    QCOMPARE(CoordinateSystem::DEFAULT_CAMERA_DISTANCE, 30000.0);
+    // 月心视角视距应约为月球半径的 4~6 倍（太小会穿模，太大月球变成小点）
+    const double ratio = CoordinateSystem::MOON_VIEW_CAMERA_DISTANCE
+                         / CoordinateSystem::MOON_RADIUS_DISPLAY;
+    QVERIFY2(ratio > 4.0 && ratio < 6.0,
+             qPrintable(QStringLiteral("moon view ratio=%1").arg(ratio)));
 }
 
 QTEST_APPLESS_MAIN(CoordinateSystemTests)

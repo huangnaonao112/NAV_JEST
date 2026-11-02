@@ -18,7 +18,14 @@ Item {
     
     // 相机目标位置
     property vector3d cameraTargetPosition: Qt.vector3d(0, 0, 0)
-    property real cameraDistance: 30000
+    property real cameraDistance: (typeof _cameraDist !== "undefined" && _cameraDist > 0)
+                                  ? _cameraDist : CoordinateSystem.defaultCameraDistance
+
+    // 线宽自适应：世界单位线宽会随缩放变粗/变细，这里按
+    // cameraDistance / 基准视距 等比缩放，屏幕观感≈恒定 2px。
+    // 上下限防止极端缩放下线宽失真。
+    readonly property real lineWidthScale: Math.max(0.15, Math.min(4.0,
+        cameraDistance / CoordinateSystem.defaultCameraDistance))
     
     // 动画过渡属性
     property vector3d animTargetPosition: Qt.vector3d(0, 0, 0)
@@ -59,7 +66,7 @@ Item {
         var targetX = CoordinateSystem.moonSceneX  // 月球位置（空间2）
         var targetY = 0
         var targetZ = 0
-        var viewDist = 8000  // 月球视角距离
+        var viewDist = CoordinateSystem.moonViewCameraDistance  // 月球视角距离
         
         // 如果有轨迹点，对准轨迹点
         if (rootItem.moonTrajectoryPoints.length > 0) {
@@ -95,6 +102,10 @@ Item {
     
     // 轨迹加载器
     property bool useTrajectoryFile: false
+    // true = 使用 $TRJ 实时轨迹（C++ 批量场景点）；false = 文件/默认控制点通道
+    property bool useTelemetryTrajectory: false
+    // 探测器小球位置（最新轨迹点，场景 2 单位）
+    property vector3d probePos: Qt.vector3d(0, 0, 0)
     property var trajectoryData: null
 
     // 慢慢绘制参数
@@ -178,33 +189,34 @@ Item {
         console.log("月球轨迹更新: 位置(" + currentPos.x + ", " + currentPos.y + ", " + currentPos.z + ")")
     }
     
-    // 从PntDataModel更新轨迹数据
+    // 文件/默认控制点通道的几何点（与 $TRJ 实时通道互斥）
+    property var legacyTrajectoryPoints: {
+        var arr = []
+        arr.length = controlPointX.length
+        for (var i = 0; i < controlPointX.length; i++) {
+            arr[i] = Qt.vector3d(controlPointX[i] || 0,
+                                 controlPointY[i] || 0,
+                                 controlPointZ[i] || 0)
+        }
+        return arr
+    }
+
+    // 从PntDataModel更新轨迹数据（33ms 节流后调用）
+    // 性能要点：坐标转换与逐点循环已在 C++ 侧批量完成
+    // （PntDataModel.trajectory3DScenePoints），此处只做 O(1) 状态更新，
+    // 万点推流时不再产生 N 个 JS 对象/次，消除 GC 卡顿。
     function updateTrajectoryFromPntModel() {
         if (!PntDataModel) return
         var count = PntDataModel.trajectory3DCount
         if (count <= 0) {
-            controlPointX = []
-            controlPointY = []
-            controlPointZ = []
             drawProgress = 0
+            useTrajectoryFile = false
+            useTelemetryTrajectory = false
             return
         }
-        
-        var xs = [], ys = [], zs = []
-        for (var i = 0; i < count; i++) {
-            // ECEF XYZ坐标（WGS84, km）转换为场景坐标
-            var x = PntDataModel.trajectory3DX(i)  // X (ECEF)
-            var y = PntDataModel.trajectory3DY(i)  // Y (ECEF)
-            var z = PntDataModel.trajectory3DZ(i)  // Z (ECEF)
-            var scenePt = eciToScene(x, y, z)
-            xs.push(scenePt.x)
-            ys.push(scenePt.y)
-            zs.push(scenePt.z)
-        }
-        
-        controlPointX = xs
-        controlPointY = ys
-        controlPointZ = zs
+        // 有实时 $TRJ 数据时，停用文件/默认控制点通道，几何体改绑批量数据
+        useTelemetryTrajectory = true
+        probePos = PntDataModel.trajectory3DLastScenePoint()
         drawProgress = count
         useTrajectoryFile = true
     }
@@ -430,6 +442,7 @@ Item {
             controlPointZ = zs
             controlPointNames = names
             controlPointColors = colors
+            rootItem.useTelemetryTrajectory = false  // 文件通道，与 $TRJ 通道互斥
             
             console.log("=== 从C++加载轨迹数据 ===")
             console.log("总点数: " + xs.length)
@@ -542,6 +555,7 @@ Item {
         controlPointZ = zs
         controlPointNames = names
         controlPointColors = colors
+        rootItem.useTelemetryTrajectory = false  // 默认演示通道
     }
 
     // 1. Static 2D Background Image
@@ -634,6 +648,7 @@ Item {
                     // 月球本体（包含轨迹点）
                     MoonItem {
                         id: moonModel
+                        lineWidthScale: rootItem.lineWidthScale
                         Component.onCompleted: {
                             rootItem.moonModelRef = moonModel
                         }
@@ -656,8 +671,9 @@ Item {
                             points: modelData ? modelData.points : []
                             // 场景 1 单位 = 1 km（地球 #Sphere 基准半径 50 × scale 127.42）
                             // 线宽统一来自 CoordinateSystem，禁止手写字面量
-                            thickness: modelData && modelData.thickness !== undefined
-                                       ? modelData.thickness : CoordinateSystem.orbitThicknessKm
+                            thickness: (modelData && modelData.thickness !== undefined
+                                        ? modelData.thickness : CoordinateSystem.orbitThicknessKm)
+                                       * rootItem.lineWidthScale
                         }
                         materials: DefaultMaterial {
                             diffuseColor: modelData ? modelData.color : "transparent"
@@ -673,20 +689,15 @@ Item {
                     id: trajectoryLine
                     visible: rootItem.useTrajectoryFile && rootItem.drawProgress > 1
                     geometry: TrajectoryLineGeometry {
-                        points: {
-                            var arr = []
-                            arr.length = rootItem.controlPointX.length
-                            for (var i = 0; i < rootItem.controlPointX.length; i++) {
-                                arr[i] = Qt.vector3d(
-                                    rootItem.controlPointX[i] || 0,
-                                    rootItem.controlPointY[i] || 0,
-                                    rootItem.controlPointZ[i] || 0
-                                )
-                            }
-                            return arr
-                        }
+                        // 实时通道：直接绑定 C++ 批量场景点（已含压缩比，无 JS 循环）
+                        // 文件通道：legacyTrajectoryPoints（点数少，不在推流热路径）
+                        // 注意：不要写成 `cond ? A : { ... }`，块不是 JS 表达式，
+                        // QML 会实例化失败 → 整个 3D 场景不渲染（曾踩过）
+                        points: rootItem.useTelemetryTrajectory
+                                ? PntDataModel.trajectory3DScenePoints
+                                : rootItem.legacyTrajectoryPoints
                         // 回放轨迹点已乘 distanceScale（空间2），线宽同属空间2
-                        thickness: CoordinateSystem.replayThicknessUnits
+                        thickness: CoordinateSystem.replayThicknessUnits * rootItem.lineWidthScale
                         drawCount: rootItem.drawProgress
                     }
                     materials: DefaultMaterial {
@@ -696,14 +707,17 @@ Item {
                     }
                 }
 
-                // 探测器小球：沿轨迹运动
+                // 探测器小球：沿轨迹运动（实时通道用 C++ 单次返回的最新点）
                 Node {
                     id: probeNode
                     visible: rootItem.useTrajectoryFile && rootItem.drawProgress > 0
                     property int idx: Math.max(0, Math.min(rootItem.drawProgress - 1, rootItem.controlPointX.length - 1))
-                    x: rootItem.controlPointX[idx] || 0
-                    y: rootItem.controlPointY[idx] || 0
-                    z: rootItem.controlPointZ[idx] || 0
+                    x: rootItem.useTelemetryTrajectory ? rootItem.probePos.x
+                                                       : (rootItem.controlPointX[idx] || 0)
+                    y: rootItem.useTelemetryTrajectory ? rootItem.probePos.y
+                                                       : (rootItem.controlPointY[idx] || 0)
+                    z: rootItem.useTelemetryTrajectory ? rootItem.probePos.z
+                                                       : (rootItem.controlPointZ[idx] || 0)
 
                     Model {
                         source: "#Sphere"

@@ -76,4 +76,7 @@ private:
 
     // 尺度自检告警只输出一次
     bool m_scaleWarned = false;
+
+    // 当前顶点缓冲对应的可见点数（-1 = 空），用于跳过等价重建
+    int m_builtVisible = -1;
 };

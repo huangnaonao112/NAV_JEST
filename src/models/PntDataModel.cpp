@@ -1,10 +1,17 @@
 #include "PntDataModel.h"
+#include "CoordinateSystem.h"
 #include <QTimer>
 
 PntDataModel::PntDataModel(QObject *parent)
     : QObject(parent)
     , m_taskStatus("空闲")
 {
+    // 3D 轨迹通知合并：33ms 窗口，推流期最多 30 次/秒
+    m_traj3DFlushTimer.setSingleShot(true);
+    m_traj3DFlushTimer.setInterval(33);
+    connect(&m_traj3DFlushTimer, &QTimer::timeout,
+            this, &PntDataModel::flushTrajectory3DChanged);
+
     // 创建任务结束检测定时器
     m_taskEndTimer = new QTimer(this);
     m_taskEndTimer->setSingleShot(true);
@@ -35,7 +42,8 @@ void PntDataModel::clearData() {
     emit trajectoryChanged();
     emit dutTrajectoryChanged();
 
-    // 清空3D轨迹
+    // 清空3D轨迹（先取消挂起的合并通知，避免清空后再推一次脏数据）
+    m_traj3DFlushTimer.stop();
     {
         QMutexLocker locker(&m_trajectory3DMutex);
         m_trajectory3D.clear();
@@ -278,11 +286,33 @@ double PntDataModel::trajectory3DZ(int index) const {
 }
 
 void PntDataModel::clearTrajectory3D() {
+    m_traj3DFlushTimer.stop();
     {
         QMutexLocker locker(&m_trajectory3DMutex);
         m_trajectory3D.clear();
     }
     emit trajectory3DChanged();
+}
+
+QVariantList PntDataModel::trajectory3DScenePoints() const {
+    // $TRJ 是 ECEF/ECI km（空间 C），回放轨迹属于地月压缩空间（空间 B），
+    // 必须显式乘压缩比；缩放只在这里做一次，QML 侧不再碰坐标。
+    QMutexLocker locker(&m_trajectory3DMutex);
+    QVariantList result;
+    result.reserve(m_trajectory3D.size());
+    for (const TrajectoryPoint3D &p : m_trajectory3D) {
+        result.append(QVariant::fromValue(
+            CoordinateSystem::toDisplaySpace(QVector3D(float(p.x), float(p.y), float(p.z)))));
+    }
+    return result;
+}
+
+QVector3D PntDataModel::trajectory3DLastScenePoint() const {
+    QMutexLocker locker(&m_trajectory3DMutex);
+    if (m_trajectory3D.isEmpty())
+        return QVector3D();
+    const TrajectoryPoint3D &p = m_trajectory3D.last();
+    return CoordinateSystem::toDisplaySpace(QVector3D(float(p.x), float(p.y), float(p.z)));
 }
 
 void PntDataModel::updateFromPnt(double simLat, double simLon, double simAlt,
@@ -375,13 +405,16 @@ void PntDataModel::updateFromTraj(double x, double y, double z) {
         }
     }
     
-    // 每10个点发射一次信号，减少UI更新频率
-    static int emitCounter = 0;
-    if (++emitCounter >= 10) {
-        emit trajectory3DChanged();
-        emitCounter = 0;
-        checkTaskStatus();
-    }
+    // 通知节流（33ms）：推流期可能每秒上百点，若逐点/每10点通知，
+    // QML 会以同样频率重建万点几何体并上传顶点缓冲。
+    // 这里用时间窗口合并，无论来点多快，下游最多 30 次/秒。
+    if (!m_traj3DFlushTimer.isActive())
+        m_traj3DFlushTimer.start();
+}
+
+void PntDataModel::flushTrajectory3DChanged() {
+    emit trajectory3DChanged();
+    checkTaskStatus();
 }
 
 void PntDataModel::updateFromSat(int count, const QStringList &prns, const QVector<double> &lats, const QVector<double> &lons) {

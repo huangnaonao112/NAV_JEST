@@ -1,5 +1,6 @@
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
+#include <QQmlError>
 #include <QQuickWindow>
 #include <QQuickItem>
 #include <QQmlContext>
@@ -257,6 +258,12 @@ int main(int argc, char *argv[])
     engine->rootContext()->setContextProperty("_cameraRotX", QVariant(rotXOk ? rotX : -30));
     engine->rootContext()->setContextProperty("_cameraRotY", QVariant(rotYOk ? rotY : 15));
 
+    // 相机距离钩子（仅测试用途）: NAVJEST_CAMERA_DIST 覆盖初始视距，
+    // 用于近距离审计线宽/拐角接缝/抗锯齿
+    bool distOk = false;
+    const int camDist = qEnvironmentVariableIntValue("NAVJEST_CAMERA_DIST", &distOk);
+    engine->rootContext()->setContextProperty("_cameraDist", QVariant(distOk ? camDist : 0));
+
     // Setup simulation timer (60 FPS)
     QTimer timer;
     QElapsedTimer elapsedTimer;
@@ -272,6 +279,15 @@ int main(int argc, char *argv[])
 
     // Standard QRC loading
     const QUrl url(QStringLiteral("qrc:/resources/qml/main.qml"));
+
+    // QML 运行时告警接入场景日志：Release GUI 下 stderr 为空，
+    // 绑定表达式/类型实例化错误若只看 stderr 会"静默丢失"（曾导致
+    // 整屏不渲染却无任何日志）。这里统一落到 logs/scene_debug.log。
+    QObject::connect(engine, &QQmlEngine::warnings, &app,
+                     [](const QList<QQmlError> &warnings) {
+        for (const QQmlError &e : warnings)
+            SCENE_LOG_ERROR("QML", e.toString());
+    });
 
     QObject::connect(engine, &QQmlApplicationEngine::objectCreated,
                      &app, [url](QObject *obj, const QUrl &objUrl) {

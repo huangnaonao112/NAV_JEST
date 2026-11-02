@@ -84,6 +84,8 @@ class CoordinateSystem : public QObject {
     Q_PROPERTY(double deceptionOrbitThicknessKm READ deceptionOrbitThicknessKm CONSTANT)
     Q_PROPERTY(double replayThicknessUnits READ replayThicknessUnits CONSTANT)
     Q_PROPERTY(double moonTrailThicknessKm READ moonTrailThicknessKm CONSTANT)
+    Q_PROPERTY(double defaultCameraDistance READ defaultCameraDistance CONSTANT)
+    Q_PROPERTY(double moonViewCameraDistance READ moonViewCameraDistance CONSTANT)
 
     // ---- 表面标记 ----
     Q_PROPERTY(double groundMarkerAltitudeKm READ groundMarkerAltitudeKm CONSTANT)
@@ -121,6 +123,14 @@ public:
     // 压缩比：真实 km → 空间 2 单位。仅用于地月转移轨迹/月球摆位
     static constexpr double DISTANCE_SCALE = MOON_SCENE_X / EARTH_MOON_DISTANCE_REAL; // ≈0.2081
 
+    // ================= 相机（线宽自适应基准）=================
+    // 默认地心视角视距；线宽按 cameraDistance / DEFAULT_CAMERA_DISTANCE
+    // 等比缩放，使屏幕上的视觉粗细保持稳定（否则放大后线变成粗带、
+    // 缩小后细成发丝——这是世界单位线宽的固有问题）
+    static constexpr double DEFAULT_CAMERA_DISTANCE = 30000.0;
+    // 月心视角视距（约 4.6 倍月球半径）
+    static constexpr double MOON_VIEW_CAMERA_DISTANCE = 8000.0;
+
     // ================= 线宽（数值与所属空间单位一致）=================
     // 轨道环：点坐标是 km（空间 1），40 km 在默认相机(30000)下约 2 px
     static constexpr double ORBIT_THICKNESS_KM = 40.0;
@@ -144,6 +154,8 @@ public:
     double deceptionOrbitThicknessKm() const { return DECEPTION_ORBIT_THICKNESS_KM; }
     double replayThicknessUnits() const { return REPLAY_THICKNESS_UNITS; }
     double moonTrailThicknessKm() const { return MOON_TRAIL_THICKNESS_KM; }
+    double defaultCameraDistance() const { return DEFAULT_CAMERA_DISTANCE; }
+    double moonViewCameraDistance() const { return MOON_VIEW_CAMERA_DISTANCE; }
     double groundMarkerAltitudeKm() const { return GROUND_MARKER_ALTITUDE; }
     double moonTrailRadiusKm() const { return MOON_TRAIL_RADIUS; }
 

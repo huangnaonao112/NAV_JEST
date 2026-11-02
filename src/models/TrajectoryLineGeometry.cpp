@@ -5,11 +5,18 @@
 
 #include <QMatrix4x4>
 #include <QtMath>
+#include <QElapsedTimer>
 
 namespace
 {
 
 constexpr float kMinSegmentLength = 1e-6f;
+
+bool geomDebugEnabled()
+{
+    static const bool on = !qEnvironmentVariableIsEmpty("NAVJEST_GEOM_DEBUG");
+    return on;
+}
 
 // 求与 dir 正交的一组基（u, v），dir 需为单位向量
 void perpendicularBasis(const QVector3D &dir, QVector3D &u, QVector3D &v)
@@ -94,6 +101,14 @@ void TrajectoryLineGeometry::setDrawCount(int count)
     if (m_drawCount == clamped)
         return;
     m_drawCount = clamped;
+    // 推流期 points 与 drawCount 常连续变化（都指向"全部点"）：
+    // 若可见段数没变，几何体无需重建，省一次全量构建 + 顶点上传。
+    const int targetVisible = (m_drawCount < 0) ? m_points.size()
+                                                : qMin(m_drawCount, m_points.size());
+    if (targetVisible == m_builtVisible) {
+        emit drawCountChanged();
+        return;
+    }
     rebuild();
     emit drawCountChanged();
 }
@@ -120,6 +135,7 @@ void TrajectoryLineGeometry::rebuild()
     const int visible = (m_drawCount < 0) ? total : qMin(m_drawCount, total);
 
     if (visible < 2) {
+        m_builtVisible = -1;
         setVertexData(QByteArray());
         setBounds(QVector3D(), QVector3D());
         update();
@@ -127,8 +143,12 @@ void TrajectoryLineGeometry::rebuild()
     }
 
     QVector3D minBound, maxBound;
+    QElapsedTimer buildTimer;
+    if (geomDebugEnabled())
+        buildTimer.start();
     const QByteArray vertexData = buildVertexData(m_points, visible, m_thickness,
                                                   &minBound, &maxBound);
+    const double buildMs = geomDebugEnabled() ? buildTimer.nsecsElapsed() / 1e6 : 0.0;
     setBounds(minBound, maxBound);
 
     // 尺度自检：线宽与轨迹包围盒严重不成比例时告警一次。
@@ -148,21 +168,42 @@ void TrajectoryLineGeometry::rebuild()
 
     // 诊断钩子: NAVJEST_GEOM_DEBUG=1 时把几何体关键数值追加到 geom_debug.txt
     // （Release GUI 下 qWarning 走 OutputDebugString 不进 stderr，故直接写文件）
-    static const bool geomDebug = !qEnvironmentVariableIsEmpty("NAVJEST_GEOM_DEBUG");
-    if (geomDebug) {
-        QFile dbg(QStringLiteral("geom_debug.txt"));
+    if (geomDebugEnabled()) {
+        // 聚合统计：每 50 次 rebuild 输出一行，避免日志爆炸
+        static int s_count = 0;
+        static double s_totalMs = 0.0;
+        static double s_maxMs = 0.0;
+        static int s_maxBytes = 0;
+        static int s_maxPts = 0;
+        ++s_count;
+        s_totalMs += buildMs;
+        s_maxMs = qMax(s_maxMs, buildMs);
+        s_maxBytes = qMax(s_maxBytes, vertexData.size());
+        s_maxPts = qMax(s_maxPts, visible);
+
+        QFile dbg(QStringLiteral("geom_perf.txt"));
         if (dbg.open(QIODevice::Append | QIODevice::Text)) {
-            dbg.write(QString("TrajGeom: pts=%1 visible=%2 bytes=%3 thickness=%4 "
-                              "bounds=(%5,%6,%7)-(%8,%9,%10)\n")
-                .arg(total).arg(visible).arg(vertexData.size())
-                .arg(m_thickness, 0, 'f', 3)
-                .arg(minBound.x(), 0, 'f', 1).arg(minBound.y(), 0, 'f', 1)
-                .arg(minBound.z(), 0, 'f', 1)
-                .arg(maxBound.x(), 0, 'f', 1).arg(maxBound.y(), 0, 'f', 1)
-                .arg(maxBound.z(), 0, 'f', 1).toUtf8());
+            if (s_count % 50 == 0) {
+                dbg.write(QString("TrajGeom perf: n=%1 avgMs=%2 maxMs=%3 "
+                                  "maxBytes=%4 maxPts=%5 lastMs=%6\n")
+                    .arg(s_count)
+                    .arg(s_totalMs / s_count, 0, 'f', 3)
+                    .arg(s_maxMs, 0, 'f', 3)
+                    .arg(s_maxBytes)
+                    .arg(s_maxPts)
+                    .arg(buildMs, 0, 'f', 3).toUtf8());
+                s_totalMs = 0.0; s_count = 0; s_maxMs = 0.0;
+            }
+            if (visible >= 2000) {
+                dbg.write(QString("TrajGeom heavy: pts=%1 bytes=%2 ms=%3 thickness=%4\n")
+                    .arg(visible).arg(vertexData.size())
+                    .arg(buildMs, 0, 'f', 3)
+                    .arg(m_thickness, 0, 'f', 3).toUtf8());
+            }
         }
     }
 
+    m_builtVisible = visible;
     setVertexData(vertexData);
     update();
 }

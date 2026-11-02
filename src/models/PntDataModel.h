@@ -3,6 +3,7 @@
 #include <QObject>
 #include <QtQml/qqml.h>
 #include <QVector>
+#include <QVector3D>
 #include <QStringList>
 #include <QMutex>
 #include <QMutexLocker>
@@ -87,6 +88,13 @@ class PntDataModel : public QObject {
     
     // 3D轨迹（用于3D场景，ECEF XYZ坐标）
     Q_PROPERTY(int trajectory3DCount READ trajectory3DCount NOTIFY trajectory3DChanged)
+
+    // 3D 轨迹的批量场景坐标（一次性返回 QVector3D 列表，已乘地月压缩比）。
+    // 供 TrajectoryLineGeometry.points 直接绑定：避免 QML 侧逐点调用
+    // trajectory3DX/Y/Z（N 点 = 3N 次跨语言调用 + N 个 JS 对象），
+    // 万点推流时这是掉帧与 GC 卡顿的主要来源。
+    Q_PROPERTY(QVariantList trajectory3DScenePoints READ trajectory3DScenePoints
+               NOTIFY trajectory3DChanged)
     
     // 任务状态: "空闲" / "任务中" / "任务结束"
     Q_PROPERTY(QString taskStatus READ taskStatus NOTIFY taskStatusChanged)
@@ -172,6 +180,12 @@ public:
     Q_INVOKABLE double trajectory3DY(int index) const;
     Q_INVOKABLE double trajectory3DZ(int index) const;
     Q_INVOKABLE void clearTrajectory3D();
+
+    // 批量：一次返回全部点的场景坐标（空间 2，已乘 DISTANCE_SCALE）
+    QVariantList trajectory3DScenePoints() const;
+
+    // 最新一个点的场景坐标（供"探测器"标记使用，单次调用）
+    Q_INVOKABLE QVector3D trajectory3DLastScenePoint() const;
     
     // 任务状态
     QString taskStatus() const;
@@ -315,6 +329,13 @@ private:
     // 任务状态
     QString m_taskStatus = "空闲";
     QTimer *m_taskEndTimer = nullptr;  // 用于检测任务结束（一段时间没有新数据）
+
+public slots:
+    // 3D 轨迹通知节流窗口到期（33ms），见 updateFromTraj
+    void flushTrajectory3DChanged();
+
+private:
+    QTimer m_traj3DFlushTimer;         // 3D 轨迹信号合并（33ms 单次触发）
     int m_lastTrajectoryCount = 0;
 
     // 场景测试类型
