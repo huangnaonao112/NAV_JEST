@@ -246,7 +246,7 @@ Item {
         }
     }
     
-    // 轨道调试按钮 (左侧中间)
+    // 轨道实测面板开关 (左侧中间)
     Rectangle {
         anchors.left: parent.left
         anchors.verticalCenter: parent.verticalCenter
@@ -254,11 +254,10 @@ Item {
         width: 40
         height: 40
         radius: 20
-        visible: false
         color: orbitDebugBtn.containsMouse ? "#4ECDC4" : "#333"
         border.color: "#4ECDC4"
         border.width: 2
-        
+
         Text {
             anchors.centerIn: parent
             text: "轨"
@@ -266,16 +265,27 @@ Item {
             font.pixelSize: 16
             font.bold: true
         }
-        
+
         MouseArea {
             id: orbitDebugBtn
             anchors.fill: parent
             hoverEnabled: true
             onClicked: {
+                insightPanel.visible = !insightPanel.visible
             }
         }
     }
-    
+
+    // navcore 轨道实测面板（真实星下点/地面站观测，500ms 刷新）
+    OrbitInsightPanel {
+        id: insightPanel
+        anchors.left: parent.left
+        anchors.verticalCenter: parent.verticalCenter
+        anchors.leftMargin: 70
+        visible: false
+        z: 5
+    }
+
     // 轨道控制点调试面板
     OrbitDebugPanel {
         id: orbitDebugPanel

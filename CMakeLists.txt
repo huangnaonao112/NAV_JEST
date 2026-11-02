@@ -210,3 +210,16 @@ add_test(NAME navcore_model_tests COMMAND navcore_model_tests)
 # ctest 直接可跑：把 Qt bin 目录前置到测试进程 PATH（Qt6_DIR=.../lib/cmake/Qt6）
 set_tests_properties(navcore_model_tests PROPERTIES
     ENVIRONMENT "PATH=${Qt6_DIR}/../../../bin\;$ENV{PATH}")
+
+# SatelliteModel navcore 接口回归测试（QTest，无 UI）
+add_executable(navcore_satmodel_tests
+    tests/model/SatelliteModelNavcoreTests.cpp
+    src/models/SatelliteModel.h
+    src/models/SatelliteModel.cpp
+)
+target_link_libraries(navcore_satmodel_tests PRIVATE navcore Qt6::Core Qt6::Gui Qt6::Qml Qt6::Test)
+target_include_directories(navcore_satmodel_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/src/models)
+add_test(NAME navcore_satmodel_tests COMMAND navcore_satmodel_tests)
+set_tests_properties(navcore_satmodel_tests PROPERTIES
+    ENVIRONMENT "PATH=${Qt6_DIR}/../../../bin\;$ENV{PATH}")

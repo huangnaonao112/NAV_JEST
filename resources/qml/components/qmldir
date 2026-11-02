@@ -19,3 +19,4 @@ LeftDock 1.0 LeftDock.qml
 RightDock 1.0 RightDock.qml
 PreviewConfirmDialog 1.0 PreviewConfirmDialog.qml
 SceneViewOverlays 1.0 SceneViewOverlays.qml
+OrbitInsightPanel 1.0 OrbitInsightPanel.qml

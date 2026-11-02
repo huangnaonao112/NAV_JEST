@@ -76,6 +76,7 @@
         <file>resources/qml/components/OrbitLine.qml</file>
         <file>resources/qml/components/FloatingBall.qml</file>
         <file>resources/qml/components/OrbitConfigPanel.qml</file>
+        <file>resources/qml/components/OrbitInsightPanel.qml</file>
         <file>resources/qml/components/ParameterInput.qml</file>
         <file>resources/qml/components/MoonItem.qml</file>
         <file>resources/qml/components/GroundWarningItem.qml</file>
