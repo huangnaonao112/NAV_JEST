@@ -1,4 +1,5 @@
 #include "TrajectoryLineGeometry.h"
+#include <QDebug>
 
 #include <QMatrix4x4>
 #include <QtMath>
@@ -55,8 +56,24 @@ void TrajectoryLineGeometry::setPoints(const QVariantList &points)
     m_flushTimer.stop();
     m_points.clear();
     m_points.reserve(points.size());
-    for (const QVariant &v : points)
-        m_points.append(v.value<QVector3D>());
+    {
+    // 兼容三种元素形态：QVector3D / [x,y,z] 列表 / {x,y,z} Map
+    // （QML JS 层传递后 vector3d 可能退化为 list 或 map）
+    for (const QVariant &v : points) {
+        if (v.canConvert<QVector3D>()) {
+            m_points.append(v.value<QVector3D>());
+        } else if (v.type() == QVariant::List) {
+            const QVariantList xyz = v.toList();
+            if (xyz.size() >= 3)
+                m_points.append(QVector3D(xyz[0].toFloat(), xyz[1].toFloat(),
+                                          xyz[2].toFloat()));
+        } else if (v.type() == QVariant::Map) {
+            const QVariantMap m = v.toMap();
+            m_points.append(QVector3D(m.value(QStringLiteral("x")).toFloat(),
+                                      m.value(QStringLiteral("y")).toFloat(),
+                                      m.value(QStringLiteral("z")).toFloat()));
+        }
+    }
     rebuild();
     emit pointsChanged();
 }
@@ -102,6 +119,7 @@ void TrajectoryLineGeometry::rebuild()
     const int visible = (m_drawCount < 0) ? total : qMin(m_drawCount, total);
 
     QByteArray vertexData;
+    const float halfWidth = m_thickness / 2.0f;
     if (visible < 2) {
         setVertexData(vertexData);
         setBounds(QVector3D(), QVector3D());
@@ -109,7 +127,6 @@ void TrajectoryLineGeometry::rebuild()
         return;
     }
 
-    const float halfWidth = m_thickness / 2.0f;
     // 每段 12 顶点（两片四边形 × 2 三角形 × 3 顶点）
     const int segmentCount = visible - 1;
     const int vertexCount = segmentCount * 12;

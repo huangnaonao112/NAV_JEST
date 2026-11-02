@@ -644,11 +644,12 @@ Item {
                         visible: (modelData && modelData.points && modelData.points.length > 0) ? true : false
                         geometry: TrajectoryLineGeometry {
                             points: modelData ? modelData.points : []
-                            thickness: (modelData && modelData.thickness !== undefined ? modelData.thickness : 0.4) * 100  // 场景单位→km
+                            thickness: modelData && modelData.thickness !== undefined ? modelData.thickness * 1.0 : 0.4
                         }
                         materials: DefaultMaterial {
                             diffuseColor: modelData ? modelData.color : "transparent"
                             lighting: DefaultMaterial.NoLighting
+                            cullMode: DefaultMaterial.NoCulling
                         }
                     }
                 }
@@ -671,12 +672,13 @@ Item {
                             }
                             return arr
                         }
-                        thickness: 80.0  // 0.8场景单位=80km
+                        thickness: 0.8
                         drawCount: rootItem.drawProgress
                     }
                     materials: DefaultMaterial {
                         diffuseColor: "#FFFFFF"
                         lighting: DefaultMaterial.NoLighting
+                        cullMode: DefaultMaterial.NoCulling
                     }
                 }
 

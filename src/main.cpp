@@ -272,6 +272,21 @@ int main(int argc, char *argv[])
     rackClient->startAutoReconnect();
     SCENE_LOG_CAT("APP_INIT", QString("RackClient auto-reconnect started"));
 
+    // 调试钩子: NAVJEST_AUTOTOGGLE_ORBITS=1 时 3 秒后自动勾选低轨(前5颗可见)，
+    // 等价于轨道显示面板第一行开关，用于无 UI 自动化验证轨道环渲染
+    if (!qEnvironmentVariableIsEmpty("NAVJEST_AUTOTOGGLE_ORBITS")) {
+        QTimer::singleShot(3000, satModel, [satModel]() {
+            const int n = satModel->satelliteCount();
+            QVariantList indices, visibles;
+            for (int i = 0; i < qMin(5, n); ++i) {
+                indices << i;
+                visibles << true;
+            }
+            satModel->setVisibilityBatch(indices, visibles);
+            SCENE_LOG_CAT("APP_INIT", QString("AUTOTOGGLE: LEO orbits on (%1)").arg(qMin(5, n)));
+        });
+    }
+
     QTimer::singleShot(500, []{ SCENE_LOG_CAT("APP_ALIVE", QString("500ms")); });
     QTimer::singleShot(2000, []{ SCENE_LOG_CAT("APP_ALIVE", QString("2000ms")); });
     QTimer::singleShot(5000, []{ SCENE_LOG_CAT("APP_ALIVE", QString("5000ms")); });
