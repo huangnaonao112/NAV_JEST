@@ -95,15 +95,18 @@ Node {
     // ========== 监听新轨迹点信号（报文点）==========
     Connections {
         target: MoonTrajectoryModel
-        function onNewTrajectoryPoint(lat, lon) {
-            messageTrajectoryGeometry.addTrajectoryPoint(lat, lon)
-            console.log("[报文点轨迹线] 新增点: lat=" + lat + ", lon=" + lon)
+        // 批量信号：模型 33ms 节流 flush 后一次推送新点，逐点喂给几何体
+        // （Geometry 内部同样 33ms 缓冲，只触发一次顶点重建）
+        function onNewTrajectoryPoints(points) {
+            for (var i = 0; i < points.length; ++i) {
+                var p = points[i]
+                messageTrajectoryGeometry.addTrajectoryPoint(p.lat, p.lon)
+            }
         }
         function onTrajectoryChanged() {
             // 当轨迹清空时，同时清除轨迹线几何体
             if (MoonTrajectoryModel && MoonTrajectoryModel.trajectoryCount === 0) {
                 messageTrajectoryGeometry.clear()
-                console.log("[报文点轨迹线] 已清除")
             }
         }
     }
@@ -125,11 +128,12 @@ Node {
     // }
     
     // ========== 报文点（红色）- 扁圆盘 + 波纹动画 ==========
+    // 只绑定最近 60 个点（recentPoints），推流期避免万点级 Repeater 重建
     Node {
         eulerRotation.y: moonSphere.eulerRotation.y
-        
+
         Repeater3D {
-            model: MoonTrajectoryModel ? MoonTrajectoryModel.trajectoryPoints : []
+            model: MoonTrajectoryModel ? MoonTrajectoryModel.recentPoints : []
             delegate: GroundWarningItem {
                 position: modelData.position
                 color: modelData.color

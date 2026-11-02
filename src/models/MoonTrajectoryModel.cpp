@@ -19,6 +19,11 @@ MoonTrajectoryModel::MoonTrajectoryModel(QObject *parent)
     , m_emitCounter(0)
     , m_trajectoryProvider(nullptr)
 {
+    // 33ms 节流：推流期缓冲点，批量入库并发信号
+    m_flushTimer.setInterval(33);
+    m_flushTimer.setSingleShot(true);
+    connect(&m_flushTimer, &QTimer::timeout, this, &MoonTrajectoryModel::flushPendingTrajectory);
+
     // 生成测试点（绿色参考点）
     generateTestPoints();
 }
@@ -76,6 +81,41 @@ QVariantList MoonTrajectoryModel::trajectoryPoints() const {
     return result;
 }
 
+// 最近轨迹点（末尾 RECENT_POINTS_LIMIT 个，供标记 Repeater 轻量绑定）
+QVariantList MoonTrajectoryModel::recentPoints() const {
+    QMutexLocker locker(&m_trajectoryMutex);
+
+    const int count = m_trajectory.size();
+    const int start = qMax(0, count - RECENT_POINTS_LIMIT);
+
+    QVariantList result;
+    result.reserve(count - start);
+    for (int i = start; i < count; ++i) {
+        const auto& point = m_trajectory[i];
+        QVariantMap item;
+        item["position"] = point.position;
+        item["lat"] = point.latitude;
+        item["lon"] = point.longitude;
+        item["name"] = QString("报文点%1").arg(i + 1);
+
+        const bool isLatest = (i == count - 1);
+        if (isLatest) {
+            item["type"] = 3;           // Trajectory 类型，波纹动画
+            item["radius"] = 120.0;
+            item["color"] = QColor("#FF0000");
+        } else {
+            item["type"] = 0;
+            item["radius"] = 60.0;
+            const double fadeFactor = static_cast<double>(i) / count;
+            const int redValue = 100 + static_cast<int>(155 * fadeFactor);
+            item["color"] = QColor(redValue, 0, 0);
+        }
+        item["errorRadius"] = 0.0;
+        result.append(item);
+    }
+    return result;
+}
+
 // 轨迹点访问
 double MoonTrajectoryModel::trajectoryLat(int index) const {
     QMutexLocker locker(&m_trajectoryMutex);
@@ -115,12 +155,47 @@ void MoonTrajectoryModel::clear() {
         QMutexLocker locker(&m_trajectoryMutex);
         m_trajectory.clear();
     }
+    m_pendingTrajectory.clear();
+    m_flushTimer.stop();
     m_currentLat = 0.0;
     m_currentLon = 0.0;
     m_currentAlt = 0.0;
     m_currentPosition = QVector3D();
     m_emitCounter = 0;
-    
+
+    emit trajectoryChanged();
+    emit currentPositionChanged();
+}
+
+// 33ms 节流窗口到期：缓冲点批量入库，统一发一轮信号
+void MoonTrajectoryModel::flushPendingTrajectory() {
+    QVariantList batch;
+    {
+        QMutexLocker locker(&m_trajectoryMutex);
+        for (MoonTrajectoryPoint &point : m_pendingTrajectory) {
+            m_trajectory.append(point);
+            batch.append(QVariantMap{
+                {"lat", point.latitude},
+                {"lon", point.longitude},
+                {"alt", point.altitude},
+            });
+        }
+        // 超过最大数量时移除最旧的点
+        while (m_trajectory.size() > MAX_TRAJECTORY_POINTS)
+            m_trajectory.removeFirst();
+        m_pendingTrajectory.clear();
+    }
+
+    if (batch.isEmpty())
+        return;
+
+    // 每个点仍逐个通知轨迹线几何体（Geometry 内部再缓冲），模型信号只发一轮
+    for (const QVariant &item : batch) {
+        const QVariantMap p = item.toMap();
+        emit newTrajectoryPoint(p.value("lat").toDouble(),
+                                p.value("lon").toDouble());
+    }
+    emit newTrajectoryPoints(batch);
     emit trajectoryChanged();
     emit currentPositionChanged();
 }
@@ -129,10 +204,10 @@ void MoonTrajectoryModel::clear() {
 void MoonTrajectoryModel::updateFromMoonTraj(double lat, double lon, double alt) {
     // km 到场景单位的转换比例
     constexpr double KM_TO_SCENE = 0.01;
-    
+
     // 月球在场景中的X偏移（世界坐标系）
     constexpr double MOON_SCENE_X = 80000.0;
-    
+
     // 1. 使用 OrbitalPhysics 转换坐标（只计算局部坐标，相对于月球中心）
     // 和地球地面点完全一样的方式！
     // 月球半径 1737.4 km，使用 1740 km 确保在表面之上可见（和地球地面点逻辑一致）
@@ -149,30 +224,24 @@ void MoonTrajectoryModel::updateFromMoonTraj(double lat, double lon, double alt)
         localPos.y() * KM_TO_SCENE,
         localPos.z() * KM_TO_SCENE
     );
-    
-    // 3. 添加到轨迹
+
+    // 3. 添加到轨迹（推流期先缓冲，33ms 批量入库）
     {
         QMutexLocker locker(&m_trajectoryMutex);
-        
+
         MoonTrajectoryPoint point;
         point.latitude = lat;
         point.longitude = lon;
         point.altitude = alt;
         point.position = localPos;  // 存储局部坐标（km单位）
-        
-        m_trajectory.append(point);
-        
-        // 超过最大数量时移除最旧的点
-        if (m_trajectory.size() > MAX_TRAJECTORY_POINTS) {
-            m_trajectory.removeFirst();
-        }
+
+        m_pendingTrajectory.append(point);
     }
-    
-    // 4. 信号发射策略：确保点和线同步更新
-    // 每个点都发射信号，保证轨迹点和轨迹线同时更新
-    emit trajectoryChanged();      // 更新轨迹点（QML Repeater3D）
-    emit currentPositionChanged();
-    emit newTrajectoryPoint(lat, lon);  // 更新轨迹线（Geometry）
+
+    // 4. 信号发射策略：推流期不再逐点发 3 个信号，
+    //    由 33ms 定时器 flushPendingTrajectory() 统一通知
+    if (!m_flushTimer.isActive())
+        m_flushTimer.start();
 }
 
 // 测试点列表（绿色参考点）

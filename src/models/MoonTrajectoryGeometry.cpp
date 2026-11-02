@@ -9,45 +9,58 @@ MoonTrajectoryGeometry::MoonTrajectoryGeometry()
 {
     // 设置图元类型为线条
     setPrimitiveType(QQuick3DGeometry::PrimitiveType::Lines);
-    
+
     // 只设置位置属性（颜色由Material的diffuseColor控制）
     addAttribute(QQuick3DGeometry::Attribute::PositionSemantic, 0, QQuick3DGeometry::Attribute::F32Type);
-    
+
     // 设置步长：3 floats = 12 bytes（只有位置）
     setStride(3 * sizeof(float));
-    
+
     // 设置初始颜色（绿色）
     m_startColor = QColor(0, 255, 0);
     m_endColor = QColor(0, 200, 255);
+
+    // 33ms 节流：批量消化推流期间的轨迹点，避免逐点全量重建几何体
+    m_flushTimer.setInterval(33);
+    m_flushTimer.setSingleShot(true);
+    connect(&m_flushTimer, &QTimer::timeout, this, &MoonTrajectoryGeometry::flushPendingPoints);
 }
 
 void MoonTrajectoryGeometry::addTrajectoryPoint(double lat, double lon)
 {
-    // 添加轨迹点（经纬度）
-    m_trajectoryPoints.append(qMakePair(lat, lon));
-    
-    // 计算3D坐标
-    QVector3D newPos = llaToCartesian(lat, lon, m_trajectoryRadius);
-    
-    // 如果有上一个点，生成大圆弧中间点
-    if (m_vertices.size() > 0) {
-        QVector3D lastPos = m_vertices.last();
-        
-        // 大圆弧插值
-        QVector<QVector3D> arcPoints = interpolateGreatCircle(lastPos, newPos, GREAT_CIRCLE_SEGMENTS);
-        
-        // 添加中间点（跳过第一个，因为它等于lastPos）
-        for (int i = 1; i < arcPoints.size(); ++i) {
-            m_vertices.append(arcPoints[i]);
-        }
-    } else {
-        // 第一个点
-        m_vertices.append(newPos);
-    }
-    
-    // 更新几何体
-    updateGeometry();
+    // 推流期高频调用：先入缓冲区，由 33ms 定时器批量刷新
+    m_pendingPoints.append(qMakePair(lat, lon));
+    if (!m_flushTimer.isActive())
+        m_flushTimer.start();
+}
 
+void MoonTrajectoryGeometry::flushPendingPoints()
+{
+    if (m_pendingPoints.isEmpty())
+        return;
+
+    for (const auto &point : m_pendingPoints)
+    {
+        m_trajectoryPoints.append(point);
+
+        QVector3D newPos = llaToCartesian(point.first, point.second, m_trajectoryRadius);
+
+        if (!m_vertices.isEmpty())
+        {
+            // 与上一个点之间生成大圆弧中间点
+            const QVector<QVector3D> arcPoints =
+                interpolateGreatCircle(m_vertices.last(), newPos, GREAT_CIRCLE_SEGMENTS);
+            for (int i = 1; i < arcPoints.size(); ++i)
+                m_vertices.append(arcPoints[i]);
+        }
+        else
+        {
+            m_vertices.append(newPos);
+        }
+    }
+    m_pendingPoints.clear();
+
+    updateGeometry();
     emit pointCountChanged();
 }
 
@@ -56,7 +69,9 @@ void MoonTrajectoryGeometry::clear()
     m_trajectoryPoints.clear();
     m_vertices.clear();
     m_vertexData.clear();
-    
+    m_pendingPoints.clear();
+    m_flushTimer.stop();
+
     updateGeometry();
 
     emit pointCountChanged();

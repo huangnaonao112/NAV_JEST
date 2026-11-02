@@ -8,6 +8,7 @@
 #include <QVariantMap>
 #include <QMutex>
 #include <QMutexLocker>
+#include <QTimer>
 
 /**
  * @brief 月球轨迹点结构（Selenographic坐标系）
@@ -61,6 +62,10 @@ class MoonTrajectoryModel : public QObject {
     // - 返回 QVariantList，格式与 groundPoints 一致
     // - QML 使用 Repeater3D + GroundWarningItem 渲染
     Q_PROPERTY(QVariantList trajectoryPoints READ trajectoryPoints NOTIFY trajectoryChanged)
+
+    // 最近轨迹点（轻量：只含末尾 RECENT_POINTS_LIMIT 个，供标记 Repeater 绑定，
+    // 避免万点级全量 QVariantList 重建）
+    Q_PROPERTY(QVariantList recentPoints READ recentPoints NOTIFY trajectoryChanged)
     
     // 测试点列表（固定的参考点，绿色显示）
     Q_PROPERTY(QVariantList testPoints READ testPoints NOTIFY testPointsChanged)
@@ -90,6 +95,9 @@ public:
     
     // 轨迹点列表（用于QML）
     QVariantList trajectoryPoints() const;
+
+    // 最近轨迹点（末尾 RECENT_POINTS_LIMIT 个，轻量）
+    QVariantList recentPoints() const;
     
     // 测试点列表（用于QML）
     QVariantList testPoints() const;
@@ -135,10 +143,14 @@ signals:
     void currentPositionChanged();
     void testPointsChanged();
     void newTrajectoryPoint(double lat, double lon);  // 新轨迹点信号（用于轨迹线更新）
-    
+    void newTrajectoryPoints(const QVariantList &points);  // 批量新点（节流窗口flush后发）
+
 private:
     // 生成标准测试点（5个关键位置）
     void generateTestPoints();
+
+    // 33ms 节流窗口：把缓冲点入库并统一发信号（推流期避免逐点信号风暴）
+    void flushPendingTrajectory();
     
     // 球面线性插值（Slerp）- 生成贴着球面的连线点
     // @param start 起点位置（单位向量）
@@ -167,9 +179,16 @@ private:
     
     // 轨迹点最大数量限制
     static constexpr int MAX_TRAJECTORY_POINTS = 10000;
-    
+
+    // 标记渲染上限：Repeater 只画最近 N 个点（全量历史仍在 m_trajectory）
+    static constexpr int RECENT_POINTS_LIMIT = 60;
+
     // 信号发射计数器（每10个点发射一次）
     int m_emitCounter = 0;
+
+    // 33ms 节流：推流期缓冲点，定时合并发信号
+    QVector<MoonTrajectoryPoint> m_pendingTrajectory;
+    QTimer m_flushTimer;
     
     // 轨迹纹理提供者
     class MoonTrajectoryProvider* m_trajectoryProvider;

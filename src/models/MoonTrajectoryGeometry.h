@@ -5,6 +5,7 @@
 #include <QVector3D>
 #include <QColor>
 #include <QVector>
+#include <QTimer>
 
 /**
  * @brief 月球轨迹几何体 - GPU高性能渲染
@@ -59,32 +60,39 @@ signals:
 private:
     // 更新几何体数据
     void updateGeometry();
-    
+
+    // 批量消化待处理点并刷新一次几何体（33ms 节流，避免逐点全量重建）
+    void flushPendingPoints();
+
     // 大圆弧插值（球面采样）
     QVector<QVector3D> interpolateGreatCircle(const QVector3D &start, const QVector3D &end, int segments);
-    
+
     // 经纬度转3D坐标
     QVector3D llaToCartesian(double lat, double lon, double radius);
-    
+
     // 顶点数据
     QByteArray m_vertexData;
-    
+
     // 轨迹点（经纬度）
     QVector<QPair<double, double>> m_trajectoryPoints;
-    
+
     // 3D顶点序列
     QVector<QVector3D> m_vertices;
-    
+
+    // 待处理的轨迹点（33ms 节流窗口内批量入库）
+    QVector<QPair<double, double>> m_pendingPoints;
+    QTimer m_flushTimer;
+
     // 颜色
     QColor m_startColor = QColor(0, 255, 0);      // 绿色起点
     QColor m_endColor = QColor(0, 200, 255);      // 青色终点
-    
+
     // 线宽
     float m_lineWidth = 2.0f;
-    
+
     // 轨迹半径（km）
     double m_trajectoryRadius = 1740.0;  // 月球表面上方
-    
+
     // 大圆弧采样段数
     static constexpr int GREAT_CIRCLE_SEGMENTS = 15;
 };
