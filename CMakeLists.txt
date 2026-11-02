@@ -5,7 +5,7 @@ project(NAV_JEST LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Quick Quick3D Core Gui Network Sql WebSockets)
+find_package(Qt6 REQUIRED COMPONENTS Quick Quick3D Core Gui Network Sql WebSockets Test)
 
 qt_standard_project_setup()
 
@@ -198,3 +198,16 @@ foreach(navcore_test navcore_orbit_tests navcore_signal_tests navcore_receiver_t
     target_link_libraries(${navcore_test} PRIVATE navcore)
     add_test(NAME ${navcore_test} COMMAND ${navcore_test})
 endforeach()
+
+# 轨道/轨迹线几何体回归测试：校验顶点缓冲被完整写入、顶点不偏离折线，
+# 兜住“指针步进单位写错 → 未初始化内存 → 整屏色块”这类静默渲染 bug。
+add_executable(trajectory_geometry_tests
+    tests/model/TrajectoryLineGeometryTests.cpp
+    src/models/TrajectoryLineGeometry.h src/models/TrajectoryLineGeometry.cpp
+)
+target_link_libraries(trajectory_geometry_tests PRIVATE
+    Qt6::Core Qt6::Gui Qt6::Quick Qt6::Quick3D Qt6::Test)
+target_include_directories(trajectory_geometry_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+add_test(NAME trajectory_geometry_tests COMMAND trajectory_geometry_tests)
+set_tests_properties(trajectory_geometry_tests PROPERTIES
+    ENVIRONMENT "PATH=${Qt6_DIR}/../../../bin")

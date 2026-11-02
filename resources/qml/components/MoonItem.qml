@@ -30,7 +30,9 @@ Node {
 
             geometry: TrajectoryLineGeometry {
                 id: messageTrajectoryGeometry
-                thickness: 30.0  // km（场景=km×0.01，30km≈0.3场景单位）
+                // 月面局部坐标单位为 km（1 场景单位 = 1 km），线宽同为 km：
+                // 30 km 约 1~2 px
+                thickness: 30.0
             }
 
             materials: DefaultMaterial {
@@ -97,8 +99,10 @@ Node {
         function onNewTrajectoryPoints(points) {
             for (var i = 0; i < points.length; ++i) {
                 var p = points[i].position
+                // 月面局部坐标即 km（1 场景单位 = 1 km，月球 #Sphere 半径
+                // 50 × scale 34.74 = 1737），直接喂入，不能再 ×0.01
                 messageTrajectoryGeometry.appendPoint(
-                    Qt.vector3d(p.x * 0.01, p.y * 0.01, p.z * 0.01))
+                    Qt.vector3d(p.x, p.y, p.z))
             }
         }
         function onTrajectoryChanged() {

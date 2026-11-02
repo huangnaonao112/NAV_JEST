@@ -465,7 +465,7 @@ QVariantList SatelliteModel::orbitPaths() const
             }
 
             pathData["color"] = QColor("#FF6666");
-            pathData["thickness"] = 0.7;
+            pathData["thickness"] = 70.0;  // km（场景 1 单位 = 1 km）
         } else {
             // 普通卫星：使用轨道参数计算
             auto pts = OrbitalPhysics::generateOrbitPoints(sat.elements, 48, m_visualSymmetry);
@@ -473,7 +473,7 @@ QVariantList SatelliteModel::orbitPaths() const
                 points.append(p);
             }
             pathData["color"] = sat.color;
-            pathData["thickness"] = 0.4;
+            pathData["thickness"] = 40.0;  // km（场景 1 单位 = 1 km）
         }
 
         pathData["points"] = points;

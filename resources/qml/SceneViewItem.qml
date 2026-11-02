@@ -9,8 +9,9 @@ Item {
     anchors.fill: parent
 
     property string viewMode: "earth"
-    property real cameraRotationX: -30
-    property real cameraRotationY: 15
+    // 初始相机角度：NAVJEST_CAMERA_ROT_X/Y 可覆盖（自动化多角度取证用）
+    property real cameraRotationX: typeof _cameraRotX !== "undefined" ? _cameraRotX : -30
+    property real cameraRotationY: typeof _cameraRotY !== "undefined" ? _cameraRotY : 15
     
     // 月球模型引用（供测试面板使用）
     property var moonModelRef: null
@@ -205,6 +206,14 @@ Item {
         controlPointZ = zs
         drawProgress = count
         useTrajectoryFile = true
+    }
+
+    // 视角测试钩子: NAVJEST_MOON_VIEW_MS=N 时 N 毫秒后切月心视角（自动化验证月面轨迹）
+    Timer {
+        running: typeof _moonViewAtMs !== "undefined" && _moonViewAtMs > 0
+        interval: typeof _moonViewAtMs !== "undefined" ? _moonViewAtMs : 0
+        repeat: false
+        onTriggered: rootItem.switchToMoonView()
     }
 
     // 性能测试钩子: NAVJEST_SIMTEST=1 时模拟用户按住拖动地球（60Hz 连续更新相机）
@@ -644,7 +653,8 @@ Item {
                         visible: (modelData && modelData.points && modelData.points.length > 0) ? true : false
                         geometry: TrajectoryLineGeometry {
                             points: modelData ? modelData.points : []
-                            thickness: modelData && modelData.thickness !== undefined ? modelData.thickness * 1.0 : 0.4
+                            // 场景 1 单位 = 1 km（地球 #Sphere 半径 50 × scale 127.42 = 6371）
+                            thickness: modelData && modelData.thickness !== undefined ? modelData.thickness : 40.0
                         }
                         materials: DefaultMaterial {
                             diffuseColor: modelData ? modelData.color : "transparent"
@@ -672,7 +682,7 @@ Item {
                             }
                             return arr
                         }
-                        thickness: 0.8
+                        thickness: 80.0  // km（回放轨迹与轨道环同一量纲，1 单位 = 1 km）
                         drawCount: rootItem.drawProgress
                     }
                     materials: DefaultMaterial {

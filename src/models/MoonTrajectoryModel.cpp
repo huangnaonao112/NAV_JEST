@@ -203,8 +203,9 @@ void MoonTrajectoryModel::flushPendingTrajectory() {
 
 // 从MNT报文更新数据
 void MoonTrajectoryModel::updateFromMoonTraj(double lat, double lon, double alt) {
-    // km 到场景单位的转换比例
-    constexpr double KM_TO_SCENE = 0.01;
+    // 场景比例：1 场景单位 = 1 km（月球 #Sphere 基准半径 50 × scale 34.74 = 1737）
+    // 因此月球局部 km 坐标可直接使用，不做缩放
+    constexpr double KM_TO_SCENE = 1.0;
 
     // 月球在场景中的X偏移（世界坐标系）
     constexpr double MOON_SCENE_X = 80000.0;

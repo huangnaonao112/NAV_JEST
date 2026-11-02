@@ -164,10 +164,11 @@ public:
     // ============================================================
     
     // 月球物理参数
-    // Qt #Sphere 默认半径 = 1（单位球），scale 直接作用于半径
-    // MoonItem.qml scale = 34.74（直径）→ 实际半径 = 34.74 / 2 = 17.37
-static constexpr double MOON_SCENE_RADIUS = 17.37;       // 月球场景半径（scale 34.74 / 2）
-static constexpr double MOON_SCENE_X = 80000.0;          // 月球在场景中的X偏移
+    // Qt #Sphere 默认半径 = 50（直径 100），scale 直接乘在半径上
+    // MoonItem.qml scale = 34.74 → 场景半径 = 50 × 34.74 = 1737 单位 = 1737 km
+    // 场景比例：1 场景单位 = 1 km
+static constexpr double MOON_SCENE_RADIUS = 1737.0;      // 月球场景半径（单位 = km）
+static constexpr double MOON_SCENE_X = 80000.0;          // 月球在场景中的X偏移（展示用）
     
     /**
      * @brief 月球经纬度转换为场景坐标
@@ -175,9 +176,8 @@ static constexpr double MOON_SCENE_X = 80000.0;          // 月球在场景中�
      * 将月心固定坐标系（Selenographic）的经纬度转换为Qt3D场景坐标。
      * 月球在场景中位于 x=80000 的位置。
      * 
-     * QML 中月球 scale = 34.74（直径），真实月球半径 = 1737.4 km
-     * 场景半径 = 34.74 / 2 = 17.37
-     * 转换比例：17.37 / 1737.4 ≈ 0.01（1 km ≈ 0.01 场景单位）
+     * QML 中月球 scale = 34.74，#Sphere 基准半径 50 → 场景半径 = 1737 单位
+     * 场景比例：1 场景单位 = 1 km（与地球一致）
      * 
      * @param lat 月球纬度（度），范围 -90 ~ +90
      * @param lon 月球经度（度），范围 -180 ~ +180
@@ -185,9 +185,7 @@ static constexpr double MOON_SCENE_X = 80000.0;          // 月球在场景中�
      * @return 场景坐标（已包含月球位置偏移）
      */
     static QVector3D moonLlaToScene(double lat, double lon, double altKm = 0.0) {
-        // 真实月球半径 1737.4 km，场景半径 17.37
-        // 比例：1 km = 17.37 / 1737.4 ≈ 0.01 场景单位
-        constexpr double KM_TO_SCENE = 17.37 / 1737.4;  // ≈ 0.01
+        constexpr double KM_TO_SCENE = 1.0;  // 1 场景单位 = 1 km
         
         // 月球场景半径（加上高度）
         double sceneRadius = MOON_SCENE_RADIUS + altKm * KM_TO_SCENE;
@@ -220,7 +218,7 @@ static constexpr double MOON_SCENE_X = 80000.0;          // 月球在场景中�
         // 2. 计算距离月球中心的距离
         double radius = localPos.length();
         // 高度（km）：(radius - MOON_SCENE_RADIUS) / KM_TO_SCENE
-        constexpr double KM_TO_SCENE = 34.74 / 1737.4;
+        constexpr double KM_TO_SCENE = 1.0;  // 1 场景单位 = 1 km
         alt = (radius - MOON_SCENE_RADIUS) / KM_TO_SCENE;
         
         // 3. 转换为经纬度

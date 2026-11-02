@@ -242,6 +242,21 @@ int main(int argc, char *argv[])
     engine->rootContext()->setContextProperty(
         "_perfSimTest", QVariant(!qEnvironmentVariableIsEmpty("NAVJEST_SIMTEST")));
 
+    // 视角测试钩子（仅测试用途）: NAVJEST_MOON_VIEW_MS=N 时登录后 N 毫秒切到月心视角，
+    // 用于无 UI 自动化验证月面轨迹线渲染（0 = 不启用）
+    bool moonViewOk = false;
+    const int moonViewMs = qEnvironmentVariableIntValue("NAVJEST_MOON_VIEW_MS", &moonViewOk);
+    engine->rootContext()->setContextProperty(
+        "_moonViewAtMs", QVariant(moonViewOk ? moonViewMs : 0));
+
+    // 相机角度钩子（仅测试用途）: NAVJEST_CAMERA_ROT_X/Y 覆盖初始俯仰/方位角，
+    // 便于自动化在多角度取证轨道环渲染
+    bool rotXOk = false, rotYOk = false;
+    const int rotX = qEnvironmentVariableIntValue("NAVJEST_CAMERA_ROT_X", &rotXOk);
+    const int rotY = qEnvironmentVariableIntValue("NAVJEST_CAMERA_ROT_Y", &rotYOk);
+    engine->rootContext()->setContextProperty("_cameraRotX", QVariant(rotXOk ? rotX : -30));
+    engine->rootContext()->setContextProperty("_cameraRotY", QVariant(rotYOk ? rotY : 15));
+
     // Setup simulation timer (60 FPS)
     QTimer timer;
     QElapsedTimer elapsedTimer;
@@ -273,17 +288,27 @@ int main(int argc, char *argv[])
     SCENE_LOG_CAT("APP_INIT", QString("RackClient auto-reconnect started"));
 
     // 调试钩子: NAVJEST_AUTOTOGGLE_ORBITS=1 时 3 秒后自动勾选低轨(前5颗可见)，
-    // 等价于轨道显示面板第一行开关，用于无 UI 自动化验证轨道环渲染
+    // 等价于轨道显示面板第一行开关，用于无 UI 自动化验证轨道环渲染。
+    // NAVJEST_AUTOTOGGLE_FROM/TO 可指定卫星索引区间（如 5-9=中轨蓝环）。
     if (!qEnvironmentVariableIsEmpty("NAVJEST_AUTOTOGGLE_ORBITS")) {
-        QTimer::singleShot(3000, satModel, [satModel]() {
+        int from = 0;
+        int to = 4;
+        if (qEnvironmentVariableIsSet("NAVJEST_AUTOTOGGLE_FROM")) {
+            from = qEnvironmentVariableIntValue("NAVJEST_AUTOTOGGLE_FROM");
+            to = qEnvironmentVariableIntValue("NAVJEST_AUTOTOGGLE_TO");
+            if (to < from)
+                to = from;
+        }
+        QTimer::singleShot(3000, satModel, [satModel, from, to]() {
             const int n = satModel->satelliteCount();
             QVariantList indices, visibles;
-            for (int i = 0; i < qMin(5, n); ++i) {
+            for (int i = from; i <= qMin(to, n - 1); ++i) {
                 indices << i;
                 visibles << true;
             }
             satModel->setVisibilityBatch(indices, visibles);
-            SCENE_LOG_CAT("APP_INIT", QString("AUTOTOGGLE: LEO orbits on (%1)").arg(qMin(5, n)));
+            SCENE_LOG_CAT("APP_INIT", QString("AUTOTOGGLE: sats %1-%2 on (%3)")
+                .arg(from).arg(to).arg(indices.size()));
         });
     }
 

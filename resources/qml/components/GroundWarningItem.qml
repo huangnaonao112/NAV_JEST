@@ -10,8 +10,10 @@ Node {
     property int type: 0        // 0: Base, 1: Jammer, 2: Target, 3: Trajectory, 4: Spoofed
     property real errorRadius: 0.0
     
-    readonly property real scaledRadius: radius / 100.0 // 转换为 3D 场景比例
-    readonly property real scaledErrorRadius: errorRadius / 100.0
+    // 场景比例：1 单位 = 1 km（地球 #Sphere 基准半径 50 × scale 127.42 = 6371）
+    // 入参 radius 即 km，可直接作为场景半径；额外 /100 会让标记缩小到不可见
+    readonly property real scaledRadius: radius
+    readonly property real scaledErrorRadius: errorRadius
     
     // Position the node - 接收km单位（C++端），由scaledRadius处理转换
     x: anchorPosition.x

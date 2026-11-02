@@ -46,6 +46,13 @@ public:
 
     int pointCount() const { return m_points.size(); }
 
+    // 纯函数构建顶点缓冲（与 rebuild() 同一实现，供单元测试直接校验）
+    // 返回：位置顶点数据（每顶点 3 float）；每个 float 都必须被写入
+    static QByteArray buildVertexData(const QVector<QVector3D> &points,
+                                      int visibleCount, float thickness,
+                                      QVector3D *minOut = nullptr,
+                                      QVector3D *maxOut = nullptr);
+
 signals:
     void pointsChanged();
     void thicknessChanged();
@@ -55,7 +62,7 @@ private:
     // 依据 m_points + m_drawCount 全量重建顶点缓冲
     void rebuild();
 
-    // 单段(a→b)生成 12 顶点（两片正交四边形）写入 ptr，返回写入的顶点数
+    // 单段(a→b)生成 12 顶点（两片正交四边形）写入 ptr，返回写入的 float 个数（36）
     static int appendSegmentVertices(float *ptr, const QVector3D &a,
                                      const QVector3D &b, float halfWidth);
 

@@ -1,5 +1,6 @@
 #include "TrajectoryLineGeometry.h"
 #include <QDebug>
+#include <QFile>
 
 #include <QMatrix4x4>
 #include <QtMath>
@@ -56,7 +57,6 @@ void TrajectoryLineGeometry::setPoints(const QVariantList &points)
     m_flushTimer.stop();
     m_points.clear();
     m_points.reserve(points.size());
-    {
     // 兼容三种元素形态：QVector3D / [x,y,z] 列表 / {x,y,z} Map
     // （QML JS 层传递后 vector3d 可能退化为 list 或 map）
     for (const QVariant &v : points) {
@@ -118,27 +118,61 @@ void TrajectoryLineGeometry::rebuild()
     const int total = m_points.size();
     const int visible = (m_drawCount < 0) ? total : qMin(m_drawCount, total);
 
-    QByteArray vertexData;
-    const float halfWidth = m_thickness / 2.0f;
     if (visible < 2) {
-        setVertexData(vertexData);
+        setVertexData(QByteArray());
         setBounds(QVector3D(), QVector3D());
         update();
         return;
     }
 
-    // 每段 12 顶点（两片四边形 × 2 三角形 × 3 顶点）
-    const int segmentCount = visible - 1;
+    QVector3D minBound, maxBound;
+    const QByteArray vertexData = buildVertexData(m_points, visible, m_thickness,
+                                                  &minBound, &maxBound);
+    setBounds(minBound, maxBound);
+
+    // 诊断钩子: NAVJEST_GEOM_DEBUG=1 时把几何体关键数值追加到 geom_debug.txt
+    // （Release GUI 下 qWarning 走 OutputDebugString 不进 stderr，故直接写文件）
+    static const bool geomDebug = !qEnvironmentVariableIsEmpty("NAVJEST_GEOM_DEBUG");
+    if (geomDebug) {
+        QFile dbg(QStringLiteral("geom_debug.txt"));
+        if (dbg.open(QIODevice::Append | QIODevice::Text)) {
+            dbg.write(QString("TrajGeom: pts=%1 visible=%2 bytes=%3 thickness=%4 "
+                              "bounds=(%5,%6,%7)-(%8,%9,%10)\n")
+                .arg(total).arg(visible).arg(vertexData.size())
+                .arg(m_thickness, 0, 'f', 3)
+                .arg(minBound.x(), 0, 'f', 1).arg(minBound.y(), 0, 'f', 1)
+                .arg(minBound.z(), 0, 'f', 1)
+                .arg(maxBound.x(), 0, 'f', 1).arg(maxBound.y(), 0, 'f', 1)
+                .arg(maxBound.z(), 0, 'f', 1).toUtf8());
+        }
+    }
+
+    setVertexData(vertexData);
+    update();
+}
+
+QByteArray TrajectoryLineGeometry::buildVertexData(const QVector<QVector3D> &points,
+                                                   int visibleCount, float thickness,
+                                                   QVector3D *minOut, QVector3D *maxOut)
+{
+    const int count = qMin(visibleCount, points.size());
+    if (count < 2)
+        return QByteArray();
+
+    const float halfWidth = thickness / 2.0f;
+    const int segmentCount = count - 1;
     const int vertexCount = segmentCount * 12;
-    vertexData.resize(vertexCount * 3 * sizeof(float));
+
+    QByteArray vertexData(vertexCount * 3 * sizeof(float), Qt::Uninitialized);
     float *ptr = reinterpret_cast<float *>(vertexData.data());
 
-    QVector3D minBound = m_points[0];
-    QVector3D maxBound = m_points[0];
+    QVector3D minBound = points[0];
+    QVector3D maxBound = points[0];
 
     for (int i = 0; i < segmentCount; ++i) {
-        const QVector3D &a = m_points[i];
-        const QVector3D &b = m_points[i + 1];
+        const QVector3D &a = points[i];
+        const QVector3D &b = points[i + 1];
+        // appendSegmentVertices 每段写 36 个 float；ptr 是 float*，按 float 个数步进
         ptr += appendSegmentVertices(ptr, a, b, halfWidth);
 
         minBound.setX(qMin(minBound.x(), qMin(a.x(), b.x())));
@@ -148,10 +182,16 @@ void TrajectoryLineGeometry::rebuild()
         maxBound.setY(qMax(maxBound.y(), qMax(a.y(), b.y())));
         maxBound.setZ(qMax(maxBound.z(), qMax(a.z(), b.z())));
     }
-    setBounds(minBound, maxBound);
 
-    setVertexData(vertexData);
-    update();
+    // 断言式校验：所有 float 必须被写满（ptr 正好走到缓冲末尾）。
+    // 这里用 Q_ASSERT 兜住“步进单位写错”这类回归（之前 12 vs 36 的 bug 即此）。
+    Q_ASSERT(ptr == reinterpret_cast<const float *>(vertexData.constData()) + vertexCount * 3);
+
+    if (minOut)
+        *minOut = minBound;
+    if (maxOut)
+        *maxOut = maxBound;
+    return vertexData;
 }
 
 int TrajectoryLineGeometry::appendSegmentVertices(float *ptr, const QVector3D &a,
@@ -161,11 +201,11 @@ int TrajectoryLineGeometry::appendSegmentVertices(float *ptr, const QVector3D &a
     const QVector3D diff = b - a;
     const float len = diff.length();
     if (len < kMinSegmentLength) {
-        // 退化段：写入 12 个重合顶点，保持顶点数对齐（不可见）
+        // 退化段：写入 12 个重合顶点，返回写入的 float 个数
         for (int i = 0; i < 12; ++i) {
             *ptr++ = a.x(); *ptr++ = a.y(); *ptr++ = a.z();
         }
-        return 12;
+        return 36;
     }
 
     const QVector3D dir = diff / len;
@@ -195,5 +235,5 @@ int TrajectoryLineGeometry::appendSegmentVertices(float *ptr, const QVector3D &a
     *ptr++ = bVV.x(); *ptr++ = bVV.y(); *ptr++ = bVV.z();
     *ptr++ = aVV.x(); *ptr++ = aVV.y(); *ptr++ = aVV.z();
 
-    return 12;
+    return 36;
 }
