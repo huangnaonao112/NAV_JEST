@@ -62,25 +62,23 @@ bool TrajectoryLoader::loadFromFile(const QString& filePath) {
         }
         // ECI坐标（km）：需要转换
         else if (coordSystem == "ECI" && units == "km") {
-            auto* coord = CoordinateSystem::instance();
             for (const auto& point : pts) {
                 QJsonObject p = point.toObject();
                 double x = p["x"].toDouble();
                 double y = p["y"].toDouble();
                 double z = p["z"].toDouble();
-                QVector3D scenePt = coord->toScene(QVector3D(x, y, z));
+                QVector3D scenePt = CoordinateSystem::toDisplaySpace(QVector3D(x, y, z));
                 m_trajectoryPoints.append(scenePt);
             }
         }
         // WGS84/ECEF坐标（km）：与ECI处理相同（简化情况下）
         else if ((coordSystem == "WGS84" || coordSystem == "ECEF") && units == "km") {
-            auto* coord = CoordinateSystem::instance();
             for (const auto& point : pts) {
                 QJsonObject p = point.toObject();
                 double x = p["x"].toDouble();
                 double y = p["y"].toDouble();
                 double z = p["z"].toDouble();
-                QVector3D scenePt = coord->toScene(QVector3D(x, y, z));
+                QVector3D scenePt = CoordinateSystem::toDisplaySpace(QVector3D(x, y, z));
                 m_trajectoryPoints.append(scenePt);
             }
         }
@@ -139,8 +137,7 @@ bool TrajectoryLoader::loadFromFile(const QString& filePath) {
         rawPoints.append(QVector3D(x, y, z));
     }
 
-    auto* coord = CoordinateSystem::instance();
-    m_trajectoryPoints = coord->toSceneList(rawPoints);
+    m_trajectoryPoints = CoordinateSystem::toDisplaySpaceList(rawPoints);
 
     QJsonArray phases = root["phases"].toArray();
     for (const auto& phase : phases) {
@@ -202,7 +199,7 @@ QVector<QVector3D> TrajectoryLoader::generateDemoTrajectory() {
     
     double earthR = CoordinateSystem::EARTH_RADIUS;
     double moonR = CoordinateSystem::MOON_RADIUS;
-    double moonDist = CoordinateSystem::MOON_DISTANCE_DISPLAY;  // 压缩后的距离
+    double moonDist = CoordinateSystem::MOON_SCENE_X;  // 压缩后的距离
     
     int totalPoints = 0;
     

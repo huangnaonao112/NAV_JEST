@@ -1,6 +1,7 @@
 #include "MoonTrajectoryModel.h"
 #include "MoonTrajectoryProvider.h"
 #include "OrbitalPhysics.h"
+#include "CoordinateSystem.h"
 #include <QDebug>
 #include <QFile>
 #include <QTextStream>
@@ -203,17 +204,17 @@ void MoonTrajectoryModel::flushPendingTrajectory() {
 
 // 从MNT报文更新数据
 void MoonTrajectoryModel::updateFromMoonTraj(double lat, double lon, double alt) {
-    // 场景比例：1 场景单位 = 1 km（月球 #Sphere 基准半径 50 × scale 34.74 = 1737）
-    // 因此月球局部 km 坐标可直接使用，不做缩放
+    // 尺度统一由 CoordinateSystem 提供：空间 1（天体局部）1 单位 = 1 km
+    // 月球摆位在空间 2，x = MOON_SCENE_X
     constexpr double KM_TO_SCENE = 1.0;
 
     // 月球在场景中的X偏移（世界坐标系）
-    constexpr double MOON_SCENE_X = 80000.0;
+    constexpr double MOON_SCENE_X = CoordinateSystem::MOON_SCENE_X;
 
     // 1. 使用 OrbitalPhysics 转换坐标（只计算局部坐标，相对于月球中心）
     // 和地球地面点完全一样的方式！
-    // 月球半径 1737.4 km，使用 1740 km 确保在表面之上可见（和地球地面点逻辑一致）
-    constexpr double MOON_RADIUS_KM = 1740.0;  // 不是1737.4，要略高于表面
+    // 月球半径 1737.4 km，使用 MOON_TRAIL_RADIUS(1740) 确保在表面之上可见
+    constexpr double MOON_RADIUS_KM = CoordinateSystem::MOON_TRAIL_RADIUS;
     QVector3D localPos = OrbitalPhysics::llaToCartesian(lat, lon, MOON_RADIUS_KM + alt);
 
     // 2. 更新当前位置（世界坐标，用于视角切换）
@@ -259,7 +260,7 @@ void MoonTrajectoryModel::generateTestPoints() {
     m_testLinePoints.clear();
     
     // 月球半径 1740 km（确保在表面之上可见）
-    constexpr double MOON_RADIUS_KM = 1740.0;
+    constexpr double MOON_RADIUS_KM = CoordinateSystem::MOON_TRAIL_RADIUS;
     
     // 设置环月分布的参数
     const int NUM_POINTS = 36;  // 36个点分布环绕月球
@@ -427,7 +428,7 @@ QVariantList MoonTrajectoryModel::trajectoryLinePoints() const {
     
     if (m_trajectory.size() < 2) return result;
     
-    constexpr double MOON_RADIUS_KM = 1740.0;
+    constexpr double MOON_RADIUS_KM = CoordinateSystem::MOON_TRAIL_RADIUS;
     
     // 为每对相邻点生成贴着球面的连线
     for (int i = 0; i < m_trajectory.size() - 1; ++i) {
@@ -455,7 +456,7 @@ QVariantList MoonTrajectoryModel::testLineSegments() const {
     
     if (m_testPoints.size() < 2) return result;
     
-    constexpr double MOON_RADIUS_KM = 1740.0;
+    constexpr double MOON_RADIUS_KM = CoordinateSystem::MOON_TRAIL_RADIUS;
     
     for (int i = 0; i < m_testPoints.size() - 1; ++i) {
         auto currentMap = m_testPoints[i].value<QVariantMap>();

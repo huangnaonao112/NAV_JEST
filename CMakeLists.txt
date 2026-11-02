@@ -203,11 +203,29 @@ endforeach()
 # 兜住“指针步进单位写错 → 未初始化内存 → 整屏色块”这类静默渲染 bug。
 add_executable(trajectory_geometry_tests
     tests/model/TrajectoryLineGeometryTests.cpp
+    src/models/CoordinateSystem.h src/models/CoordinateSystem.cpp
     src/models/TrajectoryLineGeometry.h src/models/TrajectoryLineGeometry.cpp
 )
 target_link_libraries(trajectory_geometry_tests PRIVATE
-    Qt6::Core Qt6::Gui Qt6::Quick Qt6::Quick3D Qt6::Test)
+    Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Quick3D Qt6::Test)
 target_include_directories(trajectory_geometry_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
 add_test(NAME trajectory_geometry_tests COMMAND trajectory_geometry_tests)
 set_tests_properties(trajectory_geometry_tests PROPERTIES
     ENVIRONMENT "PATH=${Qt6_DIR}/../../../bin")
+
+# 尺度常量一致性测试：锁定 CoordinateSystem 是唯一事实来源
+add_executable(coordinate_system_tests
+    tests/model/CoordinateSystemTests.cpp
+    src/models/CoordinateSystem.h src/models/CoordinateSystem.cpp
+)
+target_link_libraries(coordinate_system_tests PRIVATE
+    Qt6::Core Qt6::Gui Qt6::Qml Qt6::Test)
+target_include_directories(coordinate_system_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+add_test(NAME coordinate_system_tests COMMAND coordinate_system_tests)
+set_tests_properties(coordinate_system_tests PROPERTIES
+    ENVIRONMENT "PATH=${Qt6_DIR}/../../../bin")
+
+# QML 尺度字面量静态检查：禁止新增硬编码尺度，必须引用 CoordinateSystem
+add_test(NAME qml_unit_lint
+    COMMAND ${CMAKE_COMMAND} -DSRC_DIR=${CMAKE_SOURCE_DIR}
+            -P ${CMAKE_SOURCE_DIR}/scripts/qml_unit_lint.cmake)

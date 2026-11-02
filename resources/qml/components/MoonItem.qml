@@ -17,7 +17,8 @@ import NavModels
 Node {
     id: moonNode
     
-    readonly property real moonCenterX: 80000.0
+    // 月球在场景中的 X 位置（空间 2 的摆位，尺度见 CoordinateSystem）
+    readonly property real moonCenterX: CoordinateSystem.moonSceneX
     
     // ========== 报文点轨迹线（红色，TrajectoryLineGeometry 交叉ribbon）==========
     Node {
@@ -30,9 +31,9 @@ Node {
 
             geometry: TrajectoryLineGeometry {
                 id: messageTrajectoryGeometry
-                // 月面局部坐标单位为 km（1 场景单位 = 1 km），线宽同为 km：
-                // 30 km 约 1~2 px
-                thickness: 30.0
+                // 月面局部坐标单位为 km（1 场景单位 = 1 km），线宽同为 km
+                // 具体数值由 CoordinateSystem 统一定义（30 km ≈ 1~2 px）
+                thickness: CoordinateSystem.moonTrailThicknessKm
             }
 
             materials: DefaultMaterial {
@@ -88,19 +89,21 @@ Node {
             roughness: 0.6
             specularAmount: 0.5
         }
-        scale: Qt.vector3d(34.74, 34.74, 34.74)
+        // 场景半径 = 月球半径 1737 km（#Sphere 基准半径 50 × scale 34.74）
+        scale: Qt.vector3d(CoordinateSystem.moonNodeScale,
+                           CoordinateSystem.moonNodeScale,
+                           CoordinateSystem.moonNodeScale)
     }
     
     // ========== 监听新轨迹点信号（报文点）==========
     Connections {
         target: MoonTrajectoryModel
-        // 批量信号：模型 33ms 节流 flush 后一次推送新点（局部 km 坐标），
-        // km→场景单位 ×0.01 后喂给几何体（与标记点 GroundWarningItem 的换算一致）
+        // 批量信号：模型 33ms 节流 flush 后一次推送新点（月球局部 km 坐标）
         function onNewTrajectoryPoints(points) {
             for (var i = 0; i < points.length; ++i) {
                 var p = points[i].position
-                // 月面局部坐标即 km（1 场景单位 = 1 km，月球 #Sphere 半径
-                // 50 × scale 34.74 = 1737），直接喂入，不能再 ×0.01
+                // 月面局部坐标即 km（空间 A：1 场景单位 = 1 km，月球 #Sphere
+                // 基准半径 50 × scale 34.74 = 1737），直接喂入，不做任何换算
                 messageTrajectoryGeometry.appendPoint(
                     Qt.vector3d(p.x, p.y, p.z))
             }

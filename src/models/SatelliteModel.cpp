@@ -1,5 +1,6 @@
 #include "SatelliteModel.h"
 #include "PntDataModel.h"
+#include "CoordinateSystem.h"
 #include <QtMath>
 #include <QRandomGenerator>
 #include <QVector2D>
@@ -316,8 +317,9 @@ void SatelliteModel::updateSimulation(double time)
 void SatelliteModel::addGroundPoint(double lat, double lon, QString name, int type, double radius, QColor color, double errorRadius)
 {
     QVariantMap point;
-    // 地球半径为 6371km，设置在 6391km 确保在大气层之上可见
-    QVector3D pos = OrbitalPhysics::llaToCartesian(lat, lon, 6391.0); 
+    // 地球半径 6371 km，标记抬升到 GROUND_MARKER_ALTITUDE(6391 km) 避免被球面遮挡
+    QVector3D pos = OrbitalPhysics::llaToCartesian(
+        lat, lon, CoordinateSystem::GROUND_MARKER_ALTITUDE); 
     point["position"] = pos;
     point["lat"] = lat;
     point["lon"] = lon;
@@ -336,7 +338,8 @@ void SatelliteModel::updateGroundPoint(int index, double lat, double lon, QStrin
     if (index < 0 || index >= m_groundPoints.size()) return;
 
     QVariantMap point = m_groundPoints[index].toMap();
-    QVector3D pos = OrbitalPhysics::llaToCartesian(lat, lon, 6391.0);
+    QVector3D pos = OrbitalPhysics::llaToCartesian(
+        lat, lon, CoordinateSystem::GROUND_MARKER_ALTITUDE);
     point["position"] = pos;
     point["lat"] = lat;
     point["lon"] = lon;
@@ -465,7 +468,7 @@ QVariantList SatelliteModel::orbitPaths() const
             }
 
             pathData["color"] = QColor("#FF6666");
-            pathData["thickness"] = 70.0;  // km（场景 1 单位 = 1 km）
+            pathData["thickness"] = CoordinateSystem::DECEPTION_ORBIT_THICKNESS_KM;
         } else {
             // 普通卫星：使用轨道参数计算
             auto pts = OrbitalPhysics::generateOrbitPoints(sat.elements, 48, m_visualSymmetry);
@@ -473,7 +476,7 @@ QVariantList SatelliteModel::orbitPaths() const
                 points.append(p);
             }
             pathData["color"] = sat.color;
-            pathData["thickness"] = 40.0;  // km（场景 1 单位 = 1 km）
+            pathData["thickness"] = CoordinateSystem::ORBIT_THICKNESS_KM;
         }
 
         pathData["points"] = points;

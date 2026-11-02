@@ -3,6 +3,8 @@
 #include <QMatrix4x4>
 #include <QtMath>
 
+#include "CoordinateSystem.h"
+
 struct OrbitalElements {
     double semiMajorAxis;    // a (轨道半长轴)
     double eccentricity;     // e (偏心率)
@@ -103,16 +105,17 @@ public:
     // 将经纬度转换为三维空间坐标 (WGS-84 简化球体)
     // 适配 Qt Quick 3D #Sphere 贴图映射: 经度 0 对应 +Z 轴
     // 
-    // 重要：radius 参数单位是 km，不是场景单位！
-    // - 地球地面点：llaToCartesian(lat, lon, 6391.0) - 6391 km
-    // - 月球轨迹点：llaToCartesian(lat, lon, 1740.0) - 1740 km
-    // - 返回值单位与 radius 相同（km）
-    // 
+    // 重要：radius 参数单位是 km，返回值同样是 km（空间 1：1 单位 = 1 km）
+    // - 地球地面点：CoordinateSystem::GROUND_MARKER_ALTITUDE（6391 km）
+    // - 月球轨迹点：CoordinateSystem::MOON_TRAIL_RADIUS（1740 km）
+    // - 卫星轨道点：直接使用半长轴 a（km）
+    //
     // QML 渲染约定：
-    // - C++返回km单位，不做转换
-    // - QML的GroundWarningItem自动处理km→scene转换（scaledRadius = radius / 100.0）
-    // - 禁止在C++层预先转换！参见AGENTS.md"坐标系统约定"
-    static QVector3D llaToCartesian(double lat, double lon, double radius = 6371.0) {
+    // - C++ 返回 km，不预乘任何系数（禁止 ×0.01、/100 之类的"随手换算"）
+    // - QML 侧节点缩放/线宽一律取自 CoordinateSystem 常量
+    // - 详见 docs/坐标系与尺度规范.md
+    static QVector3D llaToCartesian(double lat, double lon,
+                                    double radius = CoordinateSystem::EARTH_RADIUS) {
         double latRad = qDegreesToRadians(lat);
         double lonRad = qDegreesToRadians(lon);
 
@@ -167,8 +170,8 @@ public:
     // Qt #Sphere 默认半径 = 50（直径 100），scale 直接乘在半径上
     // MoonItem.qml scale = 34.74 → 场景半径 = 50 × 34.74 = 1737 单位 = 1737 km
     // 场景比例：1 场景单位 = 1 km
-static constexpr double MOON_SCENE_RADIUS = 1737.0;      // 月球场景半径（单位 = km）
-static constexpr double MOON_SCENE_X = 80000.0;          // 月球在场景中的X偏移（展示用）
+// 月球尺度常量统一来自 CoordinateSystem（MOON_RADIUS_DISPLAY / MOON_SCENE_X），
+// 本类不再另行定义，避免出现"第二套事实来源"
     
     /**
      * @brief 月球经纬度转换为场景坐标
@@ -188,14 +191,14 @@ static constexpr double MOON_SCENE_X = 80000.0;          // 月球在场景中�
         constexpr double KM_TO_SCENE = 1.0;  // 1 场景单位 = 1 km
         
         // 月球场景半径（加上高度）
-        double sceneRadius = MOON_SCENE_RADIUS + altKm * KM_TO_SCENE;
+        double sceneRadius = CoordinateSystem::MOON_RADIUS_DISPLAY + altKm * KM_TO_SCENE;
         
         // 1. 计算相对于月球中心的局部坐标
         QVector3D localPos = llaToCartesian(lat, lon, sceneRadius);
         
         // 2. 加上月球在场景中的位置偏移
         return QVector3D(
-            localPos.x() + MOON_SCENE_X,
+            localPos.x() + CoordinateSystem::MOON_SCENE_X,
             localPos.y(),
             localPos.z()
         );
@@ -213,13 +216,13 @@ static constexpr double MOON_SCENE_X = 80000.0;          // 月球在场景中�
      */
     static void sceneToMoonLla(const QVector3D& scenePos, double& lat, double& lon, double& alt) {
         // 1. 减去月球位置偏移，得到相对于月球中心的坐标
-        QVector3D localPos(scenePos.x() - MOON_SCENE_X, scenePos.y(), scenePos.z());
+        QVector3D localPos(scenePos.x() - CoordinateSystem::MOON_SCENE_X, scenePos.y(), scenePos.z());
         
         // 2. 计算距离月球中心的距离
         double radius = localPos.length();
-        // 高度（km）：(radius - MOON_SCENE_RADIUS) / KM_TO_SCENE
+        // 高度（km）：(radius - CoordinateSystem::MOON_RADIUS_DISPLAY) / KM_TO_SCENE
         constexpr double KM_TO_SCENE = 1.0;  // 1 场景单位 = 1 km
-        alt = (radius - MOON_SCENE_RADIUS) / KM_TO_SCENE;
+        alt = (radius - CoordinateSystem::MOON_RADIUS_DISPLAY) / KM_TO_SCENE;
         
         // 3. 转换为经纬度
         cartesianToLla(localPos, lat, lon);

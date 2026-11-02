@@ -1,4 +1,5 @@
 #include "TrajectoryLineGeometry.h"
+#include "CoordinateSystem.h"
 #include <QDebug>
 #include <QFile>
 
@@ -129,6 +130,21 @@ void TrajectoryLineGeometry::rebuild()
     const QByteArray vertexData = buildVertexData(m_points, visible, m_thickness,
                                                   &minBound, &maxBound);
     setBounds(minBound, maxBound);
+
+    // 尺度自检：线宽与轨迹包围盒严重不成比例时告警一次。
+    // 典型历史错误：轨道环 0.4（应 40 km，细成亚像素）、月面 30 配 ×0.01
+    // 后的点（粗成 3000 km 巨带）。判据见 CoordinateSystem::thicknessIsPlausible。
+    if (!m_scaleWarned) {
+        const double extent = (maxBound - minBound).length();
+        if (!CoordinateSystem::thicknessIsPlausible(extent, m_thickness)) {
+            m_scaleWarned = true;
+            qWarning("TrajectoryLineGeometry: 线宽与轨迹量级不匹配 "
+                     "(thickness=%g, extent=%g, ratio=%g)。"
+                     "请改用 CoordinateSystem 中的线宽常量，单位必须与点坐标一致。",
+                     double(m_thickness), extent,
+                     extent > 0.0 ? double(m_thickness) / extent : 0.0);
+        }
+    }
 
     // 诊断钩子: NAVJEST_GEOM_DEBUG=1 时把几何体关键数值追加到 geom_debug.txt
     // （Release GUI 下 qWarning 走 OutputDebugString 不进 stderr，故直接写文件）

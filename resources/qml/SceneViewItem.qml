@@ -56,7 +56,7 @@ Item {
         // 月球场景半径 = 34.74（QML scale值）
         // 参考地球：半径 127.42，相机 30000，比例 1:235
         // 月球相机：34.74 * 235 ≈ 8164，取整 8000
-        var targetX = 80000  // 月球位置
+        var targetX = CoordinateSystem.moonSceneX  // 月球位置（空间2）
         var targetY = 0
         var targetZ = 0
         var viewDist = 8000  // 月球视角距离
@@ -102,19 +102,20 @@ Item {
     property int drawStep: 1
     property int drawIntervalMs: 16
     
-    // ========== 坐标转换参数 ==========
-    // 真实物理常数
-    readonly property real earthRadiusKm: 6371.0
-    readonly property real moonRadiusKm: 1737.4
-    readonly property real earthMoonDistanceKm: 384400.0
-    
-    // 场景参数
-    readonly property real sceneEarthRadius: 127.42
-    readonly property real sceneMoonRadius: 34.74  // 月球场景半径（QML scale值）
-    readonly property real sceneMoonPosition: 80000.0
-    
-    // 转换比例
-    readonly property real distanceScale: sceneMoonPosition / earthMoonDistanceKm
+    // ========== 坐标转换参数（唯一来源：CoordinateSystem）==========
+    // 场景里存在两套空间，切勿混用：
+    //   空间1 天体局部：1 单位 = 1 km（地球/月球/轨道环/月面轨迹）
+    //   空间2 地月压缩：1 单位 ≈ 4.805 km（$TRJ 回放轨迹、月球摆位）
+    // 详见 docs/坐标系与尺度规范.md
+    readonly property real earthRadiusKm: CoordinateSystem.earthRadiusKm
+    readonly property real moonRadiusKm: CoordinateSystem.moonRadiusKm
+    readonly property real earthMoonDistanceKm: CoordinateSystem.earthMoonDistanceKm
+
+    readonly property real sceneEarthRadius: CoordinateSystem.earthNodeScale
+    readonly property real sceneMoonRadius: CoordinateSystem.moonNodeScale
+    readonly property real sceneMoonPosition: CoordinateSystem.moonSceneX
+
+    readonly property real distanceScale: CoordinateSystem.distanceScale
     
     Component.onCompleted: {
         // 轨迹数据现在通过TCP TRAJ报文接收，不再从文件加载
@@ -472,7 +473,7 @@ Item {
         }
 
         // 月球轨道参数（提前定义，供转移轨道使用）
-        var moonCenterX = 80000
+        var moonCenterX = CoordinateSystem.moonSceneX
         var moonRp = 3200
         
         // 地月转移轨道 (36-59) - 大弧线连接地球切点和月球切点
@@ -628,7 +629,7 @@ Item {
                 // Moon
                 Node {
                     id: moonPivot
-                    x: 80000  // 恢复80000偏移
+                    x: CoordinateSystem.moonSceneX  // 月球摆位（空间2，非真实地月距离）
                     
                     // 月球本体（包含轨迹点）
                     MoonItem {
@@ -653,8 +654,10 @@ Item {
                         visible: (modelData && modelData.points && modelData.points.length > 0) ? true : false
                         geometry: TrajectoryLineGeometry {
                             points: modelData ? modelData.points : []
-                            // 场景 1 单位 = 1 km（地球 #Sphere 半径 50 × scale 127.42 = 6371）
-                            thickness: modelData && modelData.thickness !== undefined ? modelData.thickness : 40.0
+                            // 场景 1 单位 = 1 km（地球 #Sphere 基准半径 50 × scale 127.42）
+                            // 线宽统一来自 CoordinateSystem，禁止手写字面量
+                            thickness: modelData && modelData.thickness !== undefined
+                                       ? modelData.thickness : CoordinateSystem.orbitThicknessKm
                         }
                         materials: DefaultMaterial {
                             diffuseColor: modelData ? modelData.color : "transparent"
@@ -682,7 +685,8 @@ Item {
                             }
                             return arr
                         }
-                        thickness: 80.0  // km（回放轨迹与轨道环同一量纲，1 单位 = 1 km）
+                        // 回放轨迹点已乘 distanceScale（空间2），线宽同属空间2
+                        thickness: CoordinateSystem.replayThicknessUnits
                         drawCount: rootItem.drawProgress
                     }
                     materials: DefaultMaterial {

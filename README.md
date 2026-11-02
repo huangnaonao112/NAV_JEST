@@ -72,6 +72,12 @@ build\cmake\Debug\NAV_JEST.exe
 
 ## 注意事项
 
+- **坐标系与尺度**：场景里有两套空间（天体局部 1 单位 = 1 km；地月压缩
+  1 单位 ≈ 4.805 km）。所有尺度常量集中在 `src/models/CoordinateSystem.h`，
+  QML 侧经 `CoordinateSystem.xxx` 访问；**禁止在 QML/C++ 里手写 127.42 /
+  34.74 / 40 / 80 / 30 / 80000 之类的字面量**。新增渲染物前先读
+  [docs/坐标系与尺度规范.md](docs/坐标系与尺度规范.md)；`ctest -R qml_unit_lint`
+  会拒绝字面量。
 - QML 引擎与内嵌服务对象有意存活至进程退出（OS 回收）：QML 通过 context
   property 持有栈上模型裸指针，析构顺序颠倒即崩溃，勿改回栈上引擎。
 - `Db` 析构只 close 不 removeDatabase（仓库持有连接副本，带副本移除连接是
@@ -84,7 +90,8 @@ build\cmake\Debug\NAV_JEST.exe
 - C++ 模型经 `qt_add_qml_module(URI NavModels)` 注册为 QML_ELEMENT/QML_SINGLETON，
   QML 侧 `import NavModels` 后按类型名访问（如 `PntDataModel.simLatitude`）；
   例外：`RackStatusModelA/B`（双机柜实例）与 `CoordinateSystem`（既有 C++ 单例）
-  由 main.cpp 用 `qmlRegisterSingletonInstance` 按实例注册。新增模型时在类体
+  由 main.cpp 用 `qmlRegisterSingletonInstance` 按实例注册（所以 `CoordinateSystem.h`
+  里不要再加 `QML_SINGLETON`，否则同一 URI 重复注册）。新增模型时在类体
   Q_OBJECT 后加 `QML_SINGLETON`/`QML_ELEMENT` 并登记 qt_add_qml_module SOURCES。
 - 已知限制：窗口化 GUI 实机运行尚未在本环境验证（无头仅覆盖引导/数据/
   QML 加载路径）；qmllint 剩余 unqualified 提示为既有 id 访问风格问题。

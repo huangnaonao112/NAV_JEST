@@ -73,4 +73,7 @@ private:
     // 流式追加缓冲
     QVector<QVector3D> m_pending;
     QTimer m_flushTimer;
+
+    // 尺度自检告警只输出一次
+    bool m_scaleWarned = false;
 };

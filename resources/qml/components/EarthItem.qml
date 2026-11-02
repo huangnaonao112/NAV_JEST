@@ -37,7 +37,11 @@ Node {
             roughness: 0.6
             specularAmount: 0.5
         }
-        scale: Qt.vector3d(127.42, 127.42, 127.42) // 直径 12742km / 100 = 127.42
+        // 场景半径 = 地球半径 6371 km（#Sphere 基准半径 50 × scale 127.42）
+        // 尺度常量统一由 CoordinateSystem 提供，禁止在此手写字面量
+        scale: Qt.vector3d(CoordinateSystem.earthNodeScale,
+                           CoordinateSystem.earthNodeScale,
+                           CoordinateSystem.earthNodeScale)
     }
 
     // 地面标记点（与月球轨迹点使用相同方法）
@@ -63,7 +67,9 @@ Node {
     Model {
         id: atmosphere
         source: "#Sphere"
-        scale: Qt.vector3d(128.42, 128.42, 128.42) // 直径 12842km / 100 = 128.42
+        scale: Qt.vector3d(CoordinateSystem.atmosphereNodeScale,
+                           CoordinateSystem.atmosphereNodeScale,
+                           CoordinateSystem.atmosphereNodeScale)
         materials: PrincipledMaterial {
             baseColor: Qt.rgba(0.5, 0.8, 1.0, 0.3)
             alphaMode: PrincipledMaterial.Blend
