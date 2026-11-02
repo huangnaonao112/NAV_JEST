@@ -8,6 +8,9 @@ Node {
     // Required property injected from outside
     required property var satelliteModel
 
+    // 场景相机引用（SceneViewItem 注入）：用于按相机距离做标记尺寸补偿
+    property var sceneCamera: null
+
     // 获取可执行文件目录，构建文件系统路径（不依赖 qrc）
     property string appPath: Qt.application.arguments[0].replace(/\\/g, '/')
     property string appDir: appPath.substring(0, appPath.lastIndexOf('/') + 1)
@@ -33,6 +36,25 @@ Node {
             id: satNode
             position: model.position
             eulerRotation: model.eulerRotation
+
+            // ===== 标记尺寸：屏幕准恒定（部分补偿）=====
+            // 卫星是符号化标记；透视会让近轨掠过相机时巨大、远轨（GEO 背面）
+            // 几乎不可见。按"相机到卫星的距离"做幂次补偿（指数<1 保留深度感）：
+            //   distScale = clamp((camDist/REF)^EXP, MIN, MAX)
+            // 屏幕视角 ≈ scale/dist，GEO 远端与 MEO 远端差 <5%。
+            readonly property real camDist: {
+                if (!sceneCamera) return 0
+                var c = sceneCamera.scenePosition
+                var p = satNode.scenePosition
+                var dx = c.x - p.x, dy = c.y - p.y, dz = c.z - p.z
+                return Math.sqrt(dx*dx + dy*dy + dz*dz)
+            }
+            readonly property real distScale: camDist > 0
+                ? Math.max(CoordinateSystem.markerScaleMin,
+                           Math.min(CoordinateSystem.markerScaleMax,
+                                    Math.pow(camDist / CoordinateSystem.markerRefDistanceKm,
+                                             CoordinateSystem.markerScaleExponent)))
+                : 1.0
             // 真实模式($ORB)：引用 visibilityEpoch，health 翻转（卫星升/降）时
             // 仅重估本 delegate 的 visible（零重建），与轨道环同一机制。
             // 仿真模式：epoch 恒定，恒取 model.visible（面板开关控制）。
@@ -42,9 +64,9 @@ Node {
                 return model.visible
             }
 
-            // 动态缩放
+            // 动态缩放：基础尺寸(模型注入) × 距离补偿
             scale: {
-                let s = model.visualScale !== undefined ? model.visualScale : 1.5;
+                let s = (model.visualScale !== undefined ? model.visualScale : 1.5) * distScale;
                 return Qt.vector3d(s, s, s);
             }
 

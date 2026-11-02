@@ -658,6 +658,7 @@ Item {
                 // Satellites
                 SatelliteInstancer {
                     satelliteModel: SatelliteModel
+                    sceneCamera: camera
                 }
 
                 // Orbits - 始终创建，通过 visible 控制显示（预加载优化）

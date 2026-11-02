@@ -86,6 +86,10 @@ class CoordinateSystem : public QObject {
     Q_PROPERTY(double moonTrailThicknessKm READ moonTrailThicknessKm CONSTANT)
     Q_PROPERTY(double defaultCameraDistance READ defaultCameraDistance CONSTANT)
     Q_PROPERTY(double moonViewCameraDistance READ moonViewCameraDistance CONSTANT)
+    Q_PROPERTY(double markerRefDistanceKm READ markerRefDistanceKm CONSTANT)
+    Q_PROPERTY(double markerScaleExponent READ markerScaleExponent CONSTANT)
+    Q_PROPERTY(double markerScaleMin READ markerScaleMin CONSTANT)
+    Q_PROPERTY(double markerScaleMax READ markerScaleMax CONSTANT)
 
     // ---- 表面标记 ----
     Q_PROPERTY(double groundMarkerAltitudeKm READ groundMarkerAltitudeKm CONSTANT)
@@ -108,6 +112,17 @@ public:
 
     // 地表标记抬升：略高于地球半径，避免被球面 z-fight 吃掉
     static constexpr double GROUND_MARKER_ALTITUDE = 6391.0;  // km
+
+    // ================= 卫星标记尺寸（屏幕准恒定）=================
+    // 卫星是符号化标记（真实卫星 ~10m，按真实尺寸不可见）。
+    // 透视会让近轨卫星巨大、远轨卫星不可见；按相机距离做部分补偿：
+    //   distScale = clamp((camDist / REF)^EXP, MIN, MAX)
+    // EXP=1 为完全补偿（全部同大、无深度感）；0.75 使 GEO/MEO 远端
+    // 屏幕大小差 <5%，同时近掠过被下限钳住（防贴脸）、保留少量深度感。
+    static constexpr double MARKER_REF_DISTANCE_KM = 26000.0;  // 参考：MEO 轨道半径
+    static constexpr double MARKER_SCALE_EXPONENT = 0.75;
+    static constexpr double MARKER_SCALE_MIN = 0.25;
+    static constexpr double MARKER_SCALE_MAX = 2.0;
 
     // 大气辉光层：地球半径 + 50 km，仅视觉用途
     static constexpr double ATMOSPHERE_RADIUS_KM = 6421.0;    // km
@@ -157,6 +172,10 @@ public:
     double moonTrailThicknessKm() const { return MOON_TRAIL_THICKNESS_KM; }
     double defaultCameraDistance() const { return DEFAULT_CAMERA_DISTANCE; }
     double moonViewCameraDistance() const { return MOON_VIEW_CAMERA_DISTANCE; }
+    double markerRefDistanceKm() const { return MARKER_REF_DISTANCE_KM; }
+    double markerScaleExponent() const { return MARKER_SCALE_EXPONENT; }
+    double markerScaleMin() const { return MARKER_SCALE_MIN; }
+    double markerScaleMax() const { return MARKER_SCALE_MAX; }
     double groundMarkerAltitudeKm() const { return GROUND_MARKER_ALTITUDE; }
     double moonTrailRadiusKm() const { return MOON_TRAIL_RADIUS; }
 

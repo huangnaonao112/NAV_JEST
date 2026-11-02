@@ -389,7 +389,7 @@ void SatelliteModel::applyOrbitFrame(const OrbitMessage::Frame &frame)
         sat.health = src.health;
         sat.name = src.displayName();
         sat.visible = (src.health == 0);   // 只显示该分钟参与定位的卫星
-        sat.visualScale = 1.0;             // 相机位于轨道球面内，模型过大易贴脸
+        sat.visualScale = 0.7;             // 符号化标记：1.0 偏大，0.7 兼顾可读与比例
 
         // 分系统配色（不健康卫星用灰色，便于现场一眼识别）
         if (src.health != 0) {
@@ -512,7 +512,7 @@ void SatelliteModel::updateSimulation(double time)
 
             const QVector3D direction = -sat.position.normalized();
             sat.rotation = QQuaternion::fromDirection(direction, QVector3D(0, 1, 0)).toEulerAngles();
-            sat.visualScale = 1.0;         // 同上：真实模式缩小防贴脸
+            sat.visualScale = 0.7;         // 符号化标记，见 applyOrbitFrame 注释
         }
 
         if (!m_satellites.isEmpty()) {
