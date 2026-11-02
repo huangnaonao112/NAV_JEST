@@ -104,6 +104,7 @@ qt_add_qml_module(NAV_JEST
         src/models/CoordinateSystem.h       src/models/CoordinateSystem.cpp
         src/models/WindowPlacement.h
         src/models/SignalEvaluationModel.h  src/models/SignalEvaluationModel.cpp
+        src/models/RouteGeneratorModel.h    src/models/RouteGeneratorModel.cpp
 )
 target_link_libraries(NAV_JEST PRIVATE
     earth_server_core
@@ -183,6 +184,7 @@ add_library(navcore STATIC
     src/algo/OrbitalMechanics.h       src/algo/OrbitalMechanics.cpp
     src/algo/GnssSignalSimulation.h   src/algo/GnssSignalSimulation.cpp
     src/algo/VirtualReceiver.h        src/algo/VirtualReceiver.cpp
+    src/algo/TrajectoryEngine.h      src/algo/TrajectoryEngine.cpp
 )
 target_include_directories(navcore PUBLIC ${CMAKE_SOURCE_DIR}/src/algo)
 target_compile_features(navcore PUBLIC cxx_std_17)
@@ -192,7 +194,8 @@ enable_testing()
 add_executable(navcore_orbit_tests   tests/algo/OrbitalMechanicsTests.cpp)
 add_executable(navcore_signal_tests  tests/algo/GnssSignalSimulationTests.cpp)
 add_executable(navcore_receiver_tests tests/algo/VirtualReceiverTests.cpp)
-foreach(navcore_test navcore_orbit_tests navcore_signal_tests navcore_receiver_tests)
+add_executable(navcore_trajectory_tests tests/algo/TrajectoryEngineTests.cpp)
+foreach(navcore_test navcore_orbit_tests navcore_signal_tests navcore_receiver_tests navcore_trajectory_tests)
     target_link_libraries(${navcore_test} PRIVATE navcore)
     add_test(NAME ${navcore_test} COMMAND ${navcore_test})
 endforeach()
@@ -222,4 +225,16 @@ target_include_directories(navcore_satmodel_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/src/models)
 add_test(NAME navcore_satmodel_tests COMMAND navcore_satmodel_tests)
 set_tests_properties(navcore_satmodel_tests PROPERTIES
+    ENVIRONMENT "PATH=${Qt6_DIR}/../../../bin\;$ENV{PATH}")
+
+# 航路生成桥接层回归测试（QTest，无 UI）
+add_executable(navcore_route_tests
+    tests/model/RouteGeneratorModelTests.cpp
+    src/models/RouteGeneratorModel.h
+    src/models/RouteGeneratorModel.cpp
+)
+target_link_libraries(navcore_route_tests PRIVATE navcore Qt6::Core Qt6::Qml Qt6::Test)
+target_include_directories(navcore_route_tests PRIVATE ${CMAKE_SOURCE_DIR}/src/models)
+add_test(NAME navcore_route_tests COMMAND navcore_route_tests)
+set_tests_properties(navcore_route_tests PROPERTIES
     ENVIRONMENT "PATH=${Qt6_DIR}/../../../bin\;$ENV{PATH}")
