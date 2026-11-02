@@ -132,9 +132,10 @@ public:
     static constexpr double MOON_VIEW_CAMERA_DISTANCE = 8000.0;
 
     // ================= 线宽（数值与所属空间单位一致）=================
-    // 轨道环：点坐标是 km（空间 1），40 km 在默认相机(30000)下约 2 px
-    static constexpr double ORBIT_THICKNESS_KM = 40.0;
-    static constexpr double DECEPTION_ORBIT_THICKNESS_KM = 70.0;
+    // 轨道环：点坐标是 km（空间 1）。25 km 在默认相机(30000)下约 1.3 px；
+    // ECEF 环近段可逼近相机(数千单位)，过粗会在近处变成巨带
+    static constexpr double ORBIT_THICKNESS_KM = 25.0;
+    static constexpr double DECEPTION_ORBIT_THICKNESS_KM = 45.0;
     // 回放轨迹：点已乘 DISTANCE_SCALE（空间 2），80 单位 ≈ 384 km 物理长度
     static constexpr double REPLAY_THICKNESS_UNITS = 80.0;
     // 月面轨迹：点坐标是月球局部 km（空间 1），30 km ≈ 1~2 px

@@ -33,7 +33,14 @@ Node {
             id: satNode
             position: model.position
             eulerRotation: model.eulerRotation
-            visible: model.visible
+            // 真实模式($ORB)：引用 visibilityEpoch，health 翻转（卫星升/降）时
+            // 仅重估本 delegate 的 visible（零重建），与轨道环同一机制。
+            // 仿真模式：epoch 恒定，恒取 model.visible（面板开关控制）。
+            visible: {
+                if (SatelliteModel.visibilityEpoch >= 0)
+                    return SatelliteModel.isSatelliteVisible(index)
+                return model.visible
+            }
 
             // 动态缩放
             scale: {

@@ -260,6 +260,9 @@ void SatelliteModel::clear()
     m_frameSecondsOfWeek = 0.0;
     m_frameSimT0 = 0.0;
     m_lastSubpointSync = -1.0;
+    m_visibilityEpoch++;
+    if (wasReal)
+        emit satellitesVisibilityChanged();
 
     beginResetModel();
     m_satellites.clear();
@@ -288,6 +291,13 @@ double meanAnomalyToTrueAnomalyDeg(double meanAnomalyDeg, double eccentricity)
     return OrbitMath::toDegrees(nu);
 }
 } // namespace
+
+bool SatelliteModel::isSatelliteVisible(int index) const
+{
+    if (index < 0 || index >= m_satellites.size())
+        return false;
+    return m_satellites[index].visible;
+}
 
 void SatelliteModel::updateDayRate(const OrbitMessage::Frame &frame)
 {
@@ -378,8 +388,8 @@ void SatelliteModel::applyOrbitFrame(const OrbitMessage::Frame &frame)
         sat.meanMotionRevPerDay = src.meanMotionRevPerDay;
         sat.health = src.health;
         sat.name = src.displayName();
-        sat.visible = true;
-        sat.visualScale = 1.5;
+        sat.visible = (src.health == 0);   // 只显示该分钟参与定位的卫星
+        sat.visualScale = 1.0;             // 相机位于轨道球面内，模型过大易贴脸
 
         // 分系统配色（不健康卫星用灰色，便于现场一眼识别）
         if (src.health != 0) {
@@ -433,7 +443,7 @@ void SatelliteModel::syncSubpointsToPnt(double simTime)
     lons.reserve(m_satellites.size());
     for (const SatelliteData &sat : m_satellites) {
         if (!sat.visible)
-            continue;
+            continue;   // 只同步参与定位的卫星（与 3D 显示一致）
         prns.append(sat.name);
         lats.append(sat.latitude);
         lons.append(sat.longitude);
@@ -467,7 +477,18 @@ void SatelliteModel::updateSimulation(double time)
     if (m_realOrbitMode) {
         // 按报文日时间推进（回放时 dayRate>1，一天被压缩到几分钟）
         const double elapsed = (m_elapsedTime - m_frameSimT0) * m_dayRate;
+        // 渲染用 ECEF（地固系）：卫星始终出现在接收站半球，与 2D 星下点
+        // 一一对应（ECI 会随 GMST 漂移，与固定地球错位）
+        const double j2000 = OrbitMessage::gpsToSecondsSinceJ2000(
+            m_frameWeek, m_frameSecondsOfWeek) + elapsed;
+        const double newGmstDeg = OrbitMath::toDegrees(
+            OrbitMath::greenwichMeanSiderealAngle(j2000));
+        if (newGmstDeg != m_gmstDeg) {
+            m_gmstDeg = newGmstDeg;
+            emit gmstChanged();
+        }
         for (SatelliteData &sat : m_satellites) {
+            sat.visible = (sat.health == 0);   // 只显示参与定位的卫星
             OrbitMath::OrbitalElements el;
             el.semiMajorAxisKm = sat.elements.semiMajorAxis;
             el.eccentricity = sat.elements.eccentricity;
@@ -477,25 +498,21 @@ void SatelliteModel::updateSimulation(double time)
             el.trueAnomalyDeg = sat.elements.meanAnomaly;   // 见 applyOrbitFrame 的 M0→ν 转换
             try {
                 const OrbitMath::StateVector sv = OrbitMath::propagateKepler(el, elapsed);
-                sat.position = QVector3D(float(sv.positionKm.x),
-                                         float(sv.positionKm.y),
-                                         float(sv.positionKm.z));
+                const OrbitMath::Vector3 ecef = OrbitMath::eciToEcef(sv.positionKm, j2000);
+                sat.position = QVector3D(float(ecef.x), float(ecef.y), float(ecef.z));
             } catch (const std::exception &) {
                 continue;   // 参数非法：保持上一帧位置，不崩溃
             }
 
-            // 星下点：位置是惯性系，需转到地固系再取大地坐标
-            const double j2000 = OrbitMessage::gpsToSecondsSinceJ2000(
-                m_frameWeek, m_frameSecondsOfWeek) + elapsed;
-            const OrbitMath::Vector3 eci{sat.position.x(), sat.position.y(), sat.position.z()};
-            const OrbitMath::Vector3 ecef = OrbitMath::eciToEcef(eci, j2000);
+            // 星下点：渲染坐标已是 ECEF，直接取大地坐标
+            const OrbitMath::Vector3 ecef{sat.position.x(), sat.position.y(), sat.position.z()};
             const OrbitMath::GeodeticPosition geo = OrbitMath::ecefToGeodetic(ecef);
             sat.latitude = geo.latitudeDeg;
             sat.longitude = geo.longitudeDeg;
 
             const QVector3D direction = -sat.position.normalized();
             sat.rotation = QQuaternion::fromDirection(direction, QVector3D(0, 1, 0)).toEulerAngles();
-            sat.visualScale = 1.5;
+            sat.visualScale = 1.0;         // 同上：真实模式缩小防贴脸
         }
 
         if (!m_satellites.isEmpty()) {
@@ -678,6 +695,9 @@ QVariantList SatelliteModel::orbitPaths() const
                 const double a = el.semiMajorAxisKm;
                 const double period = 2.0 * M_PI
                     * std::sqrt((a * a * a) / OrbitMath::EarthMuKm3PerSecond2);
+                // 环保持 ECI 采样（缓存一次），地固朝向由 QML 侧整体绕
+                // 地轴旋转 -gmstDeg 实现（GMST 推进零重建），与卫星 ECEF
+                // 渲染位置始终重合
                 const int segments = 96;
                 for (int k = 0; k <= segments; ++k) {
                     const double t = period * double(k) / segments;

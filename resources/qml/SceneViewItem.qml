@@ -24,7 +24,7 @@ Item {
     // 线宽自适应：世界单位线宽会随缩放变粗/变细，这里按
     // cameraDistance / 基准视距 等比缩放，屏幕观感≈恒定 2px。
     // 上下限防止极端缩放下线宽失真。
-    readonly property real lineWidthScale: Math.max(0.15, Math.min(4.0,
+    readonly property real lineWidthScale: Math.max(0.15, Math.min(1.5,
         cameraDistance / CoordinateSystem.defaultCameraDistance))
     
     // 动画过渡属性
@@ -665,8 +665,23 @@ Item {
                 Repeater3D {
                     model: SatelliteModel ? SatelliteModel.orbitPaths : null
                     delegate: Model {
-                        // 通过 modelData 是否为空判断可见性
-                        visible: (modelData && modelData.points && modelData.points.length > 0) ? true : false
+                        // 真实模式：环缓存是 ECI 采样，绕地轴转 -GMST 得地固朝向
+                        // （与卫星 ECEF 位置重合，GMST 推进零重建）
+                        eulerRotation.z: SatelliteModel.realOrbitMode
+                                         ? -SatelliteModel.gmstDeg : 0
+                        // 可见性 = 环数据非空 且 该卫星当前可见。
+                        // 真实模式($ORB)下卫星按 health 升/降，绑定引用
+                        // visibilityEpoch 使 health 翻转时仅重估本 delegate 的
+                        // visible（零重建）；仿真模式下 epoch 恒定、由
+                        // orbitPaths 重发驱动重建，行为不变。
+                        visible: {
+                            var hasRing = modelData && modelData.points
+                                          && modelData.points.length > 0
+                            if (!hasRing) return false
+                            if (SatelliteModel.visibilityEpoch >= 0)
+                                return SatelliteModel.isSatelliteVisible(index)
+                            return true
+                        }
                         geometry: TrajectoryLineGeometry {
                             points: modelData ? modelData.points : []
                             // 场景 1 单位 = 1 km（地球 #Sphere 基准半径 50 × scale 127.42）
