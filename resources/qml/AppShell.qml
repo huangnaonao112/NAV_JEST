@@ -15,6 +15,31 @@ Item {
     property string currentTop: "task" // task/device/scene/cmd/script/monitor/about
     property string currentSide: ""     // per-top section
     property string simCurrentView: "3D"
+
+    // 视角测试钩子: NAVJEST_2D_VIEW_MS=N 时 N 毫秒后切 sim 页 2D 地图
+    // （自动化验证 2D 星下点与 3D 同源一致性）
+    Timer {
+        running: typeof _map2DViewMs !== "undefined" && _map2DViewMs > 0
+        interval: typeof _map2DViewMs !== "undefined" ? _map2DViewMs : 0
+        repeat: false
+        onTriggered: {
+            root.simCurrentView = "2D"
+            openPage("sim")
+            locateTimer.start()
+        }
+    }
+    // 切 2D 后延时定位到模拟源($PNT 报文给出的接收站位置)
+    Timer {
+        id: locateTimer
+        interval: 800
+        repeat: false
+        onTriggered: {
+            if (simPageLoader.item && simPageLoader.item.map2DView) {
+                // 中等缩放：可见卫星星下点(±70°范围)全部入画
+                simPageLoader.item.map2DView.locateTo(116.4, 39.9, 4.5)
+            }
+        }
+    }
     property string currentPage: "sim"
     property string pendingPage: ""        // 待确认的目标页面
     property string pendingPageName: ""    // 待确认的页面名称（用于显示）

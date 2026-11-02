@@ -304,10 +304,17 @@ void SatelliteModel::updateDayRate(const OrbitMessage::Frame &frame)
     // 由相邻两帧推算"报文日时间/真实时间"倍率：
     // 回放一天(86400 s)用 120 s 时 dayRate≈720，渲染按该倍率快进，
     // 卫星在帧间沿开普勒弧连续移动，而不是每帧跳一步。
+    //
+    // TCP 会把匀速发送的帧合包（到达间隔剧烈抖动），直接用瞬时到达间隔
+    // 会让倍率乱跳、外推位置过冲（GEO 曾偏 39°）。因此：
+    //   1) 瞬时倍率经 EMA 平滑；
+    //   2) EMA 结果限幅在上一次的 [1/4, 4] 倍，抑制突发；
+    //   3) 渲染外推量按"不超过约两帧的日时间"钳制（updateSimulation）。
     const double prevTow = m_frameSecondsOfWeek;
     const double prevArrival = m_frameSimT0;
     if (!m_realOrbitMode) {
         m_dayRate = 1.0;    // 首帧无历史，先按实时，第二帧起校准
+        m_rateEmaInit = false;
         return;
     }
     double dayDelta = frame.secondsOfWeek - prevTow;
@@ -316,8 +323,17 @@ void SatelliteModel::updateDayRate(const OrbitMessage::Frame &frame)
     else if (dayDelta > 302400.0)
         dayDelta -= 604800.0;
     const double wallDelta = m_elapsedTime - prevArrival;
-    if (wallDelta > 0.05 && dayDelta > 0.0 && dayDelta <= 7200.0)
-        m_dayRate = dayDelta / wallDelta;
+    if (wallDelta > 0.02 && dayDelta > 0.0 && dayDelta <= 7200.0) {
+        const double instant = dayDelta / wallDelta;
+        if (!m_rateEmaInit) {
+            m_rateEma = instant;
+            m_rateEmaInit = true;
+        } else {
+            m_rateEma = 0.75 * m_rateEma + 0.25 * instant;
+        }
+        m_dayRate = qBound(m_rateEma * 0.25, m_rateEma, m_rateEma * 4.0);
+        m_lastDayDelta = dayDelta;
+    }
     // 其余情况（暂停后恢复/乱序/倒放）保持上一次的倍率
 }
 
@@ -451,17 +467,17 @@ void SatelliteModel::syncSubpointsToPnt(double simTime)
     if (!prns.isEmpty()) {
         m_pntModel->updateFromSat(prns.size(), prns, lats, lons);
 
-        // 2D/3D 一致性自检：首次或卫星数变化时记录一条（含经纬度范围）
+        // 2D/3D 一致性自检：首次或卫星数变化时记录全部 (PRN, lat, lon)
         static int lastCount = -1;
         if (prns.size() != lastCount) {
             lastCount = prns.size();
-            double minLat = 90, maxLat = -90, minLon = 180, maxLon = -180;
-            for (double v : lats) { minLat = qMin(minLat, v); maxLat = qMax(maxLat, v); }
-            for (double v : lons) { minLon = qMin(minLon, v); maxLon = qMax(maxLon, v); }
-            SCENE_LOG_CAT("ORB", QString("subpoints synced: %1 sats, lat %2..%3, lon %4..%5")
+            QString detail;
+            for (int i = 0; i < prns.size(); ++i)
+                detail += QStringLiteral(" %1:%2,%3").arg(prns[i])
+                              .arg(lats[i], 0, 'f', 1).arg(lons[i], 0, 'f', 1);
+            SCENE_LOG_CAT("ORB", QString("subpoints synced n=%1 tow=%2:%3")
                 .arg(prns.size())
-                .arg(minLat, 0, 'f', 1).arg(maxLat, 0, 'f', 1)
-                .arg(minLon, 0, 'f', 1).arg(maxLon, 0, 'f', 1));
+                .arg(m_frameSecondsOfWeek, 0, 'f', 0).arg(detail));
         }
     }
 }
@@ -475,18 +491,17 @@ void SatelliteModel::updateSimulation(double time)
 
     // ===== 真实轨道模式：$ORB 报文给出的开普勒根数 + 二体推进 =====
     if (m_realOrbitMode) {
-        // 按报文日时间推进（回放时 dayRate>1，一天被压缩到几分钟）
-        const double elapsed = (m_elapsedTime - m_frameSimT0) * m_dayRate;
-        // 渲染用 ECEF（地固系）：卫星始终出现在接收站半球，与 2D 星下点
-        // 一一对应（ECI 会随 GMST 漂移，与固定地球错位）
-        const double j2000 = OrbitMessage::gpsToSecondsSinceJ2000(
-            m_frameWeek, m_frameSecondsOfWeek) + elapsed;
-        const double newGmstDeg = OrbitMath::toDegrees(
-            OrbitMath::greenwichMeanSiderealAngle(j2000));
-        if (newGmstDeg != m_gmstDeg) {
-            m_gmstDeg = newGmstDeg;
-            emit gmstChanged();
-        }
+        // 按报文日时间推进（回放时 dayRate>1，一天被压缩到几分钟）。
+        // 外推量钳制在约两帧的日时间内：即使倍率抖动，位置也不会甩飞
+        double elapsed = (m_elapsedTime - m_frameSimT0) * m_dayRate;
+        const double maxElapsed = m_lastDayDelta * 2.0;
+        if (elapsed > maxElapsed)
+            elapsed = maxElapsed;
+        else if (elapsed < -maxElapsed)
+            elapsed = -maxElapsed;
+        // 广播星历根数(Ω0 已吸收 GMST 偏置)经二体推进的输出即 ECEF——
+        // 不能再做 GMST 旋转(重复扣地球自转, 曾致星下点错位 196°)。
+        // 卫星始终出现在接收站半球, 与 2D 星下点一一对应。
         for (SatelliteData &sat : m_satellites) {
             sat.visible = (sat.health == 0);   // 只显示参与定位的卫星
             OrbitMath::OrbitalElements el;
@@ -498,17 +513,29 @@ void SatelliteModel::updateSimulation(double time)
             el.trueAnomalyDeg = sat.elements.meanAnomaly;   // 见 applyOrbitFrame 的 M0→ν 转换
             try {
                 const OrbitMath::StateVector sv = OrbitMath::propagateKepler(el, elapsed);
-                const OrbitMath::Vector3 ecef = OrbitMath::eciToEcef(sv.positionKm, j2000);
-                sat.position = QVector3D(float(ecef.x), float(ecef.y), float(ecef.z));
+                // GPS 广播约定：帧根数的 Ω0 已对齐"周起始"，广播算法烧进
+                // -Ωe×tow(周内秒) —— 实测 tow=0 帧位置即真值、 tow>0 帧多转
+                // +Ωe×tow。因此渲染 ECEF = 惯性推进位置绕地轴(Z)转
+                // -Ωe×tow_render(tow_render = 帧 tow + 日时间外推)。
+                // 验证：GEO 帧时刻定点不动、外推期净转 ≈0；MEO 净转 (n-Ωe)Δ ✓
+                const double towRender = m_frameSecondsOfWeek + elapsed;
+                const double spinRad =
+                    -OrbitMath::EarthRotationRateRadPerSecond * towRender;
+                const double cs = std::cos(spinRad);
+                const double sn = std::sin(spinRad);
+                const double ex = sv.positionKm.x * cs - sv.positionKm.y * sn;
+                const double ey = sv.positionKm.x * sn + sv.positionKm.y * cs;
+                const double ez = sv.positionKm.z;
+                OrbitMath::Vector3 ecef;
+                ecef.x = ex; ecef.y = ey; ecef.z = ez;
+                const OrbitMath::GeodeticPosition geo = OrbitMath::ecefToGeodetic(ecef);
+                sat.latitude = geo.latitudeDeg;
+                sat.longitude = geo.longitudeDeg;
+                // 渲染：标准 ECEF → 场景轴约定(λ=0→+Z, Y=北极)：scene=(y,z,x)
+                sat.position = QVector3D(float(ey), float(ez), float(ex));
             } catch (const std::exception &) {
                 continue;   // 参数非法：保持上一帧位置，不崩溃
             }
-
-            // 星下点：渲染坐标已是 ECEF，直接取大地坐标
-            const OrbitMath::Vector3 ecef{sat.position.x(), sat.position.y(), sat.position.z()};
-            const OrbitMath::GeodeticPosition geo = OrbitMath::ecefToGeodetic(ecef);
-            sat.latitude = geo.latitudeDeg;
-            sat.longitude = geo.longitudeDeg;
 
             const QVector3D direction = -sat.position.normalized();
             sat.rotation = QQuaternion::fromDirection(direction, QVector3D(0, 1, 0)).toEulerAngles();
@@ -702,9 +729,10 @@ QVariantList SatelliteModel::orbitPaths() const
                 for (int k = 0; k <= segments; ++k) {
                     const double t = period * double(k) / segments;
                     const OrbitMath::StateVector sv = OrbitMath::propagateKepler(el, t);
-                    points.append(QVector3D(float(sv.positionKm.x),
-                                            float(sv.positionKm.y),
-                                            float(sv.positionKm.z)));
+                    // 环 = "帧时刻的轨道在地固系"（与卫星同一语义），场景轴映射
+                    points.append(QVector3D(float(sv.positionKm.y),
+                                            float(sv.positionKm.z),
+                                            float(sv.positionKm.x)));
                 }
             } catch (const std::exception &) {
                 // 参数非法：给空轨道，避免渲染垃圾

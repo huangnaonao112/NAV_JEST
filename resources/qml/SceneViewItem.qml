@@ -666,10 +666,6 @@ Item {
                 Repeater3D {
                     model: SatelliteModel ? SatelliteModel.orbitPaths : null
                     delegate: Model {
-                        // 真实模式：环缓存是 ECI 采样，绕地轴转 -GMST 得地固朝向
-                        // （与卫星 ECEF 位置重合，GMST 推进零重建）
-                        eulerRotation.z: SatelliteModel.realOrbitMode
-                                         ? -SatelliteModel.gmstDeg : 0
                         // 可见性 = 环数据非空 且 该卫星当前可见。
                         // 真实模式($ORB)下卫星按 health 升/降，绑定引用
                         // visibilityEpoch 使 health 翻转时仅重估本 delegate 的

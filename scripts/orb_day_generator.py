@@ -108,16 +108,15 @@ def gmst_deg(t_j2000):
 
 
 def elevation_deg(rec, tow, week, lat, lon):
-    x, y, z = sat_ecef(rec, tow)
-    t_j2000 = week * 604800.0 + tow - GPS_EPOCH_J2000
-    th = math.radians(gmst_deg(t_j2000))
-    xe = x * math.cos(th) + y * math.sin(th)
-    ye = -x * math.sin(th) + y * math.cos(th)
+    # 广播星历标准算法(含 -Ωe·toe 与 (Ω̇-Ωe)·tk 项)的输出已是 ECEF——
+    # 不能再做 GMST 旋转！(曾因多转一次恒星时角导致可见集整体错位 ~105°,
+    # "北京可见"变成地球另一侧的错位集合)
+    xe, ye, ze = sat_ecef(rec, tow)
     la, lo = math.radians(lat), math.radians(lon)
     sl, cl, so, co = math.sin(la), math.cos(la), math.sin(lo), math.cos(lo)
     east = -so * xe + co * ye
-    north = -sl * co * xe - sl * so * ye + cl * z
-    up = cl * co * xe + cl * so * ye + sl * z
+    north = -sl * co * xe - sl * so * ye + cl * ze
+    up = cl * co * xe + cl * so * ye + sl * ze
     return math.degrees(math.atan2(up, math.hypot(east, north)))
 
 
@@ -202,6 +201,11 @@ def main():
 
     # ---- 第二遍：每帧固定发并集；health=0 表示该分钟参与定位，1 表示不参与 ----
     lines = [frame_line('BEG,%09.3f,%d' % (0.0, args.test_type))]
+    # $PNT 声明接收站(模拟源)位置——2D 地图"定位到模拟源"与可见性筛选同源
+    pnt = ('PNT,%09.3f,%.6f,%.6f,%.3f,%.6f,%.6f,%.3f,'
+           '0.0000,0.0000,0.0000,0.0000,0.0000,0.0000'
+           % (0.0, args.lat, args.lon, 0.05, args.lat, args.lon, 0.05))
+    lines.append(frame_line(pnt))
     n_frames = 0
     sat_minutes = 0
     per_minute_counts = []
@@ -239,6 +243,7 @@ def main():
         per_minute_counts.append(len(vis))
 
     lines.append(frame_line('END,%09.3f,%d' % (86399.0, args.test_type)))
+    # 注: 上面 n_frames 只统计 $ORB 帧
 
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
     with open(args.out, 'w', encoding='utf-8', newline='\n') as f:

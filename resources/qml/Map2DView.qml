@@ -621,6 +621,19 @@ Item {
      * 定位到模拟源位置并放大到最大瓦片级别
      * 如果模拟源坐标有效，则设置地图中心点并缩放到最大级别
      */
+    // 定位到指定经纬度并设定缩放（自动化验证/通用定位入口）
+    function locateTo(lon, lat, zoom) {
+        if (isNaN(lon) || isNaN(lat)) return false
+        tileMap.centerLon = lon
+        tileMap.centerLat = lat
+        if (!isNaN(zoom) && zoom > 0)
+            tileMap.zoomContinuous = zoom
+        if (typeof SceneLogger !== "undefined")
+            SceneLogger.logQml("MAP2D", "locateTo " + lon + "," + lat
+                               + " zoom=" + tileMap.zoomContinuous)
+        return true
+    }
+
     function locateToSimPoint() {
         if (!PntDataModel) {
             console.log("[Map2DView] locateToSimPoint: PntDataModel is null")
@@ -645,7 +658,9 @@ Item {
         // 放大到最大瓦片级别
         tileMap.zoomContinuous = tileMap.maxZoom
         
-        console.log("[Map2DView] locateToSimPoint: centered to", targetLon, targetLat, "zoom", tileMap.maxZoom)
+        if (typeof SceneLogger !== "undefined")
+            SceneLogger.logQml("MAP2D", "locateToSimPoint centered to " + targetLon + "," + targetLat
+                               + " zoom=" + tileMap.maxZoom + " tileCenter=" + tileMap.centerLon + "," + tileMap.centerLat)
         return true
     }
 

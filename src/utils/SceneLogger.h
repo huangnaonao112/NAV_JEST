@@ -7,17 +7,25 @@
 #include <QMutex>
 #include <QDebug>
 #include <QCoreApplication>
+#include <QtQml/qqml.h>
 
 /**
  * 文件日志工具类
  * 将关键操作日志写入文件，方便排查问题
  * 日志文件位置：应用程序目录下的 logs/scene_debug.log
  */
-class SceneLogger {
+class SceneLogger : public QObject {
+    Q_OBJECT
+    QML_SINGLETON
+    QML_ELEMENT
 public:
     static SceneLogger& instance() {
         static SceneLogger logger;
         return logger;
+    }
+
+    Q_INVOKABLE void logQml(const QString &category, const QString &message) {
+        log(category, message);
     }
 
     void log(const QString &category, const QString &message, bool consoleOutput = false) {
@@ -62,8 +70,8 @@ public:
         return m_logFilePath;
     }
 
-private:
-    SceneLogger() {
+public:
+    explicit SceneLogger(QObject *parent = nullptr) : QObject(parent) {
         QString appDir = QCoreApplication::applicationDirPath();
         QString logDir = appDir + "/logs";
         QDir dir(logDir);

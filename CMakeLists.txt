@@ -104,13 +104,16 @@ qt_add_qml_module(NAV_JEST
         src/RackStatusClient.h              src/RackStatusClient.cpp
         src/models/CoordinateSystem.h       src/models/CoordinateSystem.cpp
         src/models/WindowPlacement.h
+        src/utils/SceneLogger.h
 )
 target_link_libraries(NAV_JEST PRIVATE
     navcore
     earth_server_core
     Qt6::Quick Qt6::Quick3D Qt6::Core Qt6::Gui Qt6::Network Qt6::Sql Qt6::WebSockets
 )
-target_include_directories(NAV_JEST PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_include_directories(NAV_JEST PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/src/utils)
 target_precompile_headers(NAV_JEST PRIVATE src/pch.h)
 
 # ---------------------------------------------------------------------------

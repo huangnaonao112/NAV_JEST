@@ -250,6 +250,13 @@ int main(int argc, char *argv[])
     engine->rootContext()->setContextProperty(
         "_moonViewAtMs", QVariant(moonViewOk ? moonViewMs : 0));
 
+    // 2D 视图测试钩子（仅测试用途）: NAVJEST_2D_VIEW_MS=N 时登录后 N 毫秒切到
+    // sim 页 2D 地图，用于自动化验证 2D 星下点与 3D 的一致性
+    bool map2DOk = false;
+    const int map2DMs = qEnvironmentVariableIntValue("NAVJEST_2D_VIEW_MS", &map2DOk);
+    engine->rootContext()->setContextProperty(
+        "_map2DViewMs", QVariant(map2DOk ? map2DMs : 0));
+
     // 相机角度钩子（仅测试用途）: NAVJEST_CAMERA_ROT_X/Y 覆盖初始俯仰/方位角，
     // 便于自动化在多角度取证轨道环渲染
     bool rotXOk = false, rotYOk = false;
