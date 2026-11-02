@@ -275,10 +275,92 @@ void SatelliteModel::clear()
         emit realOrbitModeChanged();
 }
 
+namespace {
+// 广播星历给的是参考平近点角 M0；propagateKepler 以真近点角为历元量，
+// 需经 E 求解换成 ν。applyOrbitFrame 的两条路径共用。
+double meanAnomalyToTrueAnomalyDeg(double meanAnomalyDeg, double eccentricity)
+{
+    const double m0 = OrbitMath::toRadians(meanAnomalyDeg);
+    const double eAnom = OrbitMath::solveEccentricAnomaly(m0, eccentricity);
+    const double nu = std::atan2(std::sqrt(1.0 - eccentricity * eccentricity)
+                                     * std::sin(eAnom),
+                                 std::cos(eAnom) - eccentricity);
+    return OrbitMath::toDegrees(nu);
+}
+} // namespace
+
+void SatelliteModel::updateDayRate(const OrbitMessage::Frame &frame)
+{
+    // 由相邻两帧推算"报文日时间/真实时间"倍率：
+    // 回放一天(86400 s)用 120 s 时 dayRate≈720，渲染按该倍率快进，
+    // 卫星在帧间沿开普勒弧连续移动，而不是每帧跳一步。
+    const double prevTow = m_frameSecondsOfWeek;
+    const double prevArrival = m_frameSimT0;
+    if (!m_realOrbitMode) {
+        m_dayRate = 1.0;    // 首帧无历史，先按实时，第二帧起校准
+        return;
+    }
+    double dayDelta = frame.secondsOfWeek - prevTow;
+    if (dayDelta < -302400.0)
+        dayDelta += 604800.0;
+    else if (dayDelta > 302400.0)
+        dayDelta -= 604800.0;
+    const double wallDelta = m_elapsedTime - prevArrival;
+    if (wallDelta > 0.05 && dayDelta > 0.0 && dayDelta <= 7200.0)
+        m_dayRate = dayDelta / wallDelta;
+    // 其余情况（暂停后恢复/乱序/倒放）保持上一次的倍率
+}
+
 void SatelliteModel::applyOrbitFrame(const OrbitMessage::Frame &frame)
 {
     if (frame.satellites.isEmpty())
         return;
+
+    // ===== 快路径：卫星集合与轨道形状都没变（白天文件回放的常态，
+    // 每帧只是历元/M0 推进）→ 原地更新，QML 不重建 delegate、
+    // 轨道环不重新采样。轨道环是完整周期采样，形状与 M0 无关。=====
+    bool sameSet = m_realOrbitMode
+                   && m_satellites.size() == frame.satellites.size();
+    bool shapeChanged = false;
+    if (sameSet) {
+        for (int i = 0; i < frame.satellites.size(); ++i) {
+            const OrbitMessage::Satellite &src = frame.satellites.at(i);
+            const SatelliteData &dst = m_satellites.at(i);
+            if (dst.name != src.displayName()) {
+                sameSet = false;
+                break;
+            }
+            if (dst.elements.semiMajorAxis != src.semiMajorAxisKm
+                || dst.elements.eccentricity != src.eccentricity
+                || dst.elements.inclination != src.inclinationDeg
+                || dst.elements.raan != src.raanDeg
+                || dst.elements.argPerigee != src.argumentOfPerigeeDeg) {
+                shapeChanged = true;
+            }
+        }
+    }
+    if (sameSet) {
+        for (int i = 0; i < frame.satellites.size(); ++i) {
+            const OrbitMessage::Satellite &src = frame.satellites.at(i);
+            SatelliteData &sat = m_satellites[i];
+            sat.elements.meanAnomaly =
+                meanAnomalyToTrueAnomalyDeg(src.meanAnomalyDeg, src.eccentricity);
+            sat.health = src.health;
+        }
+        updateDayRate(frame);
+        m_frameWeek = frame.week;
+        m_frameSecondsOfWeek = frame.secondsOfWeek;
+        m_frameSimT0 = m_elapsedTime;
+        if (shapeChanged) {
+            invalidateOrbitCache();
+            emit orbitPathsChanged();
+        }
+        emit dataChanged(createIndex(0, 0),
+                         createIndex(m_satellites.size() - 1, 0),
+                         {PositionRole, RotationRole, LatitudeRole, LongitudeRole});
+        updateSimulation(m_elapsedTime);
+        return;
+    }
 
     beginResetModel();
     m_satellites.clear();
@@ -311,19 +393,15 @@ void SatelliteModel::applyOrbitFrame(const OrbitMessage::Frame &frame)
         }
         sat.elements.color = sat.color;
 
-        // propagateKepler 以真近点角为历元量：M0 → E → ν
-        const double ecc = src.eccentricity;
-        const double m0 = OrbitMath::toRadians(src.meanAnomalyDeg);
-        const double eAnom = OrbitMath::solveEccentricAnomaly(m0, ecc);
-        const double nu = std::atan2(std::sqrt(1.0 - ecc * ecc) * std::sin(eAnom),
-                                     std::cos(eAnom) - ecc);
-        sat.elements.meanAnomaly = OrbitMath::toDegrees(nu);
+        sat.elements.meanAnomaly =
+            meanAnomalyToTrueAnomalyDeg(src.meanAnomalyDeg, src.eccentricity);
 
         m_satellites.append(sat);
     }
     endResetModel();
 
     m_realOrbitMode = true;
+    updateDayRate(frame);
     m_frameWeek = frame.week;
     m_frameSecondsOfWeek = frame.secondsOfWeek;
     m_frameSimT0 = m_elapsedTime;
@@ -387,7 +465,8 @@ void SatelliteModel::updateSimulation(double time)
 
     // ===== 真实轨道模式：$ORB 报文给出的开普勒根数 + 二体推进 =====
     if (m_realOrbitMode) {
-        const double elapsed = m_elapsedTime - m_frameSimT0;
+        // 按报文日时间推进（回放时 dayRate>1，一天被压缩到几分钟）
+        const double elapsed = (m_elapsedTime - m_frameSimT0) * m_dayRate;
         for (SatelliteData &sat : m_satellites) {
             OrbitMath::OrbitalElements el;
             el.semiMajorAxisKm = sat.elements.semiMajorAxis;
@@ -581,10 +660,9 @@ QVariantList SatelliteModel::orbitPaths() const
         // 不在地固系采样，否则轨道环会变成不闭合的弧段。
         QVariantList realList;
         for (const SatelliteData &sat : m_satellites) {
-            if (!sat.visible) {
-                realList.append(QVariant());
-                continue;
-            }
+            // 真实模式下集合固定（全天并集），所有卫星都画环：
+            // 不参与定位的卫星本体灰显，环保持同色，便于看出它的完整轨道
+            {
             QVariantMap pathData;
             QVariantList points;
 
@@ -616,6 +694,7 @@ QVariantList SatelliteModel::orbitPaths() const
             pathData["color"] = sat.color;
             pathData["thickness"] = CoordinateSystem::ORBIT_THICKNESS_KM;
             realList.append(pathData);
+            }
         }
         m_cachedOrbitPaths = realList;
         m_orbitPathsCacheValid = true;

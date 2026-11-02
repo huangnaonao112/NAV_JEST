@@ -138,10 +138,15 @@ private:
     int m_frameWeek = 0;                 // 轨道根数参考历元（GPS 周）
     double m_frameSecondsOfWeek = 0.0;   // 轨道根数参考历元（周内秒）
     double m_frameSimT0 = 0.0;           // 收到该帧时的仿真时刻
+    double m_dayRate = 1.0;              // 报文日时间/真实时间（回放快进倍率，
+                                         //  由相邻两帧的 tow 差与到达间隔推算）
     double m_lastSubpointSync = -1.0;    // 2D 星下点上次同步的仿真时刻
 
     // 把当前星下点同步给 2D 地图（与 3D 同源，保证一一对应）
     void syncSubpointsToPnt(double simTime);
+
+    // 由相邻帧推算日时间倍率（见 m_dayRate 注释）
+    void updateDayRate(const OrbitMessage::Frame &frame);
 
     // 轨道缓存 - 避免每帧重新计算
     mutable QVariantList m_cachedOrbitPaths;
