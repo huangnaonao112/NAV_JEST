@@ -103,9 +103,11 @@ qt_add_qml_module(NAV_JEST
         src/RackStatusClient.h              src/RackStatusClient.cpp
         src/models/CoordinateSystem.h       src/models/CoordinateSystem.cpp
         src/models/WindowPlacement.h
+        src/models/SignalEvaluationModel.h  src/models/SignalEvaluationModel.cpp
 )
 target_link_libraries(NAV_JEST PRIVATE
     earth_server_core
+    navcore
     Qt6::Quick Qt6::Quick3D Qt6::Core Qt6::Gui Qt6::Network Qt6::Sql Qt6::WebSockets
 )
 target_include_directories(NAV_JEST PRIVATE ${CMAKE_SOURCE_DIR}/src)
