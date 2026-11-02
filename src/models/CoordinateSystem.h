@@ -201,6 +201,22 @@ public:
         return result;
     }
 
+    // ================= 轴向约定映射（防"两套 ECEF"错位）=================
+    // 标准 ECEF：λ=0 → +X，Z=北极（navcore geodeticToEcef 输出）。
+    // 场景约定：λ=0 → +Z，Y=北极（llaToCartesian / 地球贴图）。
+    // scene = (ecef.y, ecef.z, ecef.x)。历史教训：两者混用致星下点
+    // 整体错位 ~90°+（见 docs/轨道参数报文接口.md §11）。
+    static QVector3D sceneFromEcefStd(const QVector3D &ecefStd)
+    {
+        return QVector3D(ecefStd.y(), ecefStd.z(), ecefStd.x());
+    }
+
+    /** @brief 场景轴序 -> 标准 ECEF 轴序（ecefToGeodetic 等数据面计算用） */
+    static QVector3D ecefStdFromScene(const QVector3D &scene)
+    {
+        return QVector3D(scene.z(), scene.x(), scene.y());
+    }
+
     /**
      * @brief 线宽合理性检查（供渲染层自检，防止再次出现量级错配）
      *

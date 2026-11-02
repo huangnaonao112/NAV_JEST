@@ -190,6 +190,27 @@ double solveEccentricAnomaly(double meanAnomalyRad,
     return normalizeRadians(eccentricAnomaly);
 }
 
+double meanToTrueAnomalyDeg(double meanAnomalyDeg, double eccentricity)
+{
+    const double meanAnomaly = toRadians(meanAnomalyDeg);
+    const double eccentricAnomaly = solveEccentricAnomaly(meanAnomaly,
+                                                          eccentricity);
+    const double trueAnomaly = std::atan2(
+        std::sqrt(1.0 - eccentricity * eccentricity)
+            * std::sin(eccentricAnomaly),
+        std::cos(eccentricAnomaly) - eccentricity);
+    return toDegrees(trueAnomaly);
+}
+
+Vector3 rotateZ(const Vector3 &value, double angleRad)
+{
+    const double cosine = std::cos(angleRad);
+    const double sine = std::sin(angleRad);
+    return { cosine * value.x - sine * value.y,
+             sine * value.x + cosine * value.y,
+             value.z };
+}
+
 StateVector stateFromElements(const OrbitalElements &elements,
                               double trueAnomalyDeg,
                               double gravitationalParameter)

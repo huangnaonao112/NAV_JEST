@@ -278,20 +278,6 @@ void SatelliteModel::clear()
         emit realOrbitModeChanged();
 }
 
-namespace {
-// 广播星历给的是参考平近点角 M0；propagateKepler 以真近点角为历元量，
-// 需经 E 求解换成 ν。applyOrbitFrame 的两条路径共用。
-double meanAnomalyToTrueAnomalyDeg(double meanAnomalyDeg, double eccentricity)
-{
-    const double m0 = OrbitMath::toRadians(meanAnomalyDeg);
-    const double eAnom = OrbitMath::solveEccentricAnomaly(m0, eccentricity);
-    const double nu = std::atan2(std::sqrt(1.0 - eccentricity * eccentricity)
-                                     * std::sin(eAnom),
-                                 std::cos(eAnom) - eccentricity);
-    return OrbitMath::toDegrees(nu);
-}
-} // namespace
-
 bool SatelliteModel::isSatelliteVisible(int index) const
 {
     if (index < 0 || index >= m_satellites.size())
@@ -370,7 +356,7 @@ void SatelliteModel::applyOrbitFrame(const OrbitMessage::Frame &frame)
             const OrbitMessage::Satellite &src = frame.satellites.at(i);
             SatelliteData &sat = m_satellites[i];
             sat.elements.meanAnomaly =
-                meanAnomalyToTrueAnomalyDeg(src.meanAnomalyDeg, src.eccentricity);
+                OrbitMath::meanToTrueAnomalyDeg(src.meanAnomalyDeg, src.eccentricity);
             sat.health = src.health;
         }
         updateDayRate(frame);
@@ -420,7 +406,7 @@ void SatelliteModel::applyOrbitFrame(const OrbitMessage::Frame &frame)
         sat.elements.color = sat.color;
 
         sat.elements.meanAnomaly =
-            meanAnomalyToTrueAnomalyDeg(src.meanAnomalyDeg, src.eccentricity);
+            OrbitMath::meanToTrueAnomalyDeg(src.meanAnomalyDeg, src.eccentricity);
 
         m_satellites.append(sat);
     }
@@ -521,18 +507,14 @@ void SatelliteModel::updateSimulation(double time)
                 const double towRender = m_frameSecondsOfWeek + elapsed;
                 const double spinRad =
                     -OrbitMath::EarthRotationRateRadPerSecond * towRender;
-                const double cs = std::cos(spinRad);
-                const double sn = std::sin(spinRad);
-                const double ex = sv.positionKm.x * cs - sv.positionKm.y * sn;
-                const double ey = sv.positionKm.x * sn + sv.positionKm.y * cs;
-                const double ez = sv.positionKm.z;
-                OrbitMath::Vector3 ecef;
-                ecef.x = ex; ecef.y = ey; ecef.z = ez;
+                const OrbitMath::Vector3 ecef =
+                    OrbitMath::rotateZ(sv.positionKm, spinRad);
                 const OrbitMath::GeodeticPosition geo = OrbitMath::ecefToGeodetic(ecef);
                 sat.latitude = geo.latitudeDeg;
                 sat.longitude = geo.longitudeDeg;
                 // 渲染：标准 ECEF → 场景轴约定(λ=0→+Z, Y=北极)：scene=(y,z,x)
-                sat.position = QVector3D(float(ey), float(ez), float(ex));
+                sat.position = CoordinateSystem::sceneFromEcefStd(
+                    QVector3D(float(ecef.x), float(ecef.y), float(ecef.z)));
             } catch (const std::exception &) {
                 continue;   // 参数非法：保持上一帧位置，不崩溃
             }
@@ -730,9 +712,9 @@ QVariantList SatelliteModel::orbitPaths() const
                     const double t = period * double(k) / segments;
                     const OrbitMath::StateVector sv = OrbitMath::propagateKepler(el, t);
                     // 环 = "帧时刻的轨道在地固系"（与卫星同一语义），场景轴映射
-                    points.append(QVector3D(float(sv.positionKm.y),
-                                            float(sv.positionKm.z),
-                                            float(sv.positionKm.x)));
+                    points.append(CoordinateSystem::sceneFromEcefStd(
+                        QVector3D(float(sv.positionKm.x), float(sv.positionKm.y),
+                                  float(sv.positionKm.z))));
                 }
             } catch (const std::exception &) {
                 // 参数非法：给空轨道，避免渲染垃圾

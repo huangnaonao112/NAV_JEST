@@ -74,7 +74,10 @@ def parse_brdc(path):
 
 
 def sat_ecef(rec, tow):
-    """广播星历标准算法：ECEF(km)。与 ICD 一致（含谐波改正）。"""
+    """广播星历标准算法：ECEF(km)。与 ICD 一致（含谐波改正）。
+    BDS GEO（C01-C05）按 ICD 追加两步坐标旋转：
+      1) 绕 X 轴转 -5°（GEO 倾角归零化）
+      2) 绕 Z 轴转 Ωe·tk（惯性→地固的 GEO 特殊处理）"""
     a = rec['sqrta'] ** 2 / 1000.0
     e = rec['e']
     n = math.sqrt(MU / a ** 3) + rec['dn']
@@ -97,6 +100,12 @@ def sat_ecef(rec, tow):
     x = xo * math.cos(omg) - yo * math.cos(inc) * math.sin(omg)
     y = xo * math.sin(omg) + yo * math.cos(inc) * math.cos(omg)
     z = yo * math.sin(inc)
+    if rec['sys'] == 'C' and 1 <= rec['prn'] <= 5:
+        # GEO 星历参数本身在地固系（定点描述），仅需 5° 倾角归零：
+        # 绕 X 轴转 -5°。ICD 中的 Ωe·tk 旋转属于"惯性输出"实现变体，
+        # 对本标准算法（已含 -Ωe·toe 地固项）是多余的（曾致 GEO 偏 ~180°）。
+        c5, s5 = math.cos(math.radians(-5.0)), math.sin(math.radians(-5.0))
+        y, z = y * c5 - z * s5, y * s5 + z * c5
     return x, y, z
 
 

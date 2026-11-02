@@ -70,6 +70,15 @@ double solveEccentricAnomaly(double meanAnomalyRad,
                              double tolerance = 1.0e-12,
                              int maximumIterations = 50);
 
+// 由平近点角解偏近点角再得真近点角（deg）。广播星历帧携带的 M0 需要
+// 先转成 ν 才能交给 propagateKepler/stateFromElements。
+double meanToTrueAnomalyDeg(double meanAnomalyDeg,
+                            double eccentricity);
+
+// 绕 Z 轴旋转（右手，rad）。用于 GPS 广播约定下的地球自转补偿：
+// 帧根数已对齐"周起始 ECEF"，帧间外推需绕地轴转 -Ωe×tow_render。
+Vector3 rotateZ(const Vector3 &value, double angleRad);
+
 // 根据轨道根数和真近点角计算地心惯性系位置、速度。
 StateVector stateFromElements(const OrbitalElements &elements,
                               double trueAnomalyDeg,

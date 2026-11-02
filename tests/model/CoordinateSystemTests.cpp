@@ -1,7 +1,9 @@
 #include <QtTest>
 #include <QtMath>
+#include <cmath>
 
 #include "models/CoordinateSystem.h"
+#include "OrbitalMechanics.h"
 
 /**
  * 尺度常量一致性测试。
@@ -22,6 +24,7 @@ private slots:
     void thicknessSanityGuardRejectsKnownBadValues();
     void displaySpaceRoundTrip();
     void cameraDistancesAreSane();
+    void sceneAxisConventionMatchesEarthTexture();
 };
 
 void CoordinateSystemTests::spherePrimitiveRadiusIsQmlDefault()
@@ -107,6 +110,39 @@ void CoordinateSystemTests::cameraDistancesAreSane()
                          / CoordinateSystem::MOON_RADIUS_DISPLAY;
     QVERIFY2(ratio > 4.0 && ratio < 6.0,
              qPrintable(QStringLiteral("moon view ratio=%1").arg(ratio)));
+}
+
+void CoordinateSystemTests::sceneAxisConventionMatchesEarthTexture()
+{
+    // 场景轴约定(λ=0→+Z, Y=北极, llaToCartesian/地球贴图) 与
+    // 标准 ECEF(λ=0→+X, Z=北极, navcore geodeticToEcef) 经
+    // sceneFromEcefStd 映射后必须指向同一方向——不一致即"卫星与
+    // 地球错位"回归（曾致 2D 标记散布美洲）
+    using CS = CoordinateSystem;
+    const double cases[][2] = {
+        {0.0, 0.0}, {39.9, 116.4}, {-45.0, 120.0}, {80.0, -30.0}, {-60.0, 170.0},
+    };
+    for (const auto &c : cases) {
+        const double lat = c[0], lon = c[1];
+        // 场景约定公式（即被钉死的约定本体）：x=cosφ·sinλ, y=sinφ, z=cosφ·cosλ
+        const double la = qDegreesToRadians(lat), lo = qDegreesToRadians(lon);
+        const QVector3D sceneRef(float(6371.0 * std::cos(la) * std::sin(lo)),
+                                 float(6371.0 * std::sin(la)),
+                                 float(6371.0 * std::cos(la) * std::cos(lo)));
+        OrbitMath::GeodeticPosition geo;
+        geo.latitudeDeg = lat;
+        geo.longitudeDeg = lon;
+        geo.altitudeMeters = 0.0;
+        const OrbitMath::Vector3 ecefStd = OrbitMath::geodeticToEcef(geo);
+        const QVector3D sceneMapped = CS::sceneFromEcefStd(
+            QVector3D(float(ecefStd.x), float(ecefStd.y), float(ecefStd.z)));
+        const QVector3D a = sceneRef.normalized();
+        const QVector3D b = sceneMapped.normalized();
+        QVERIFY2(QVector3D::dotProduct(a, b) > 0.99999,
+                 qPrintable(QStringLiteral("lat=%1 lon=%2 dot=%3")
+                            .arg(lat).arg(lon)
+                            .arg(QVector3D::dotProduct(a, b))));
+    }
 }
 
 QTEST_APPLESS_MAIN(CoordinateSystemTests)

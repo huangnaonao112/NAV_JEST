@@ -199,7 +199,9 @@ add_executable(navcore_signal_tests    tests/algo/GnssSignalSimulationTests.cpp)
 add_executable(navcore_receiver_tests  tests/algo/VirtualReceiverTests.cpp)
 add_executable(navcore_trajectory_tests tests/algo/TrajectoryEngineTests.cpp)
 add_executable(navcore_noise_tests     tests/algo/MeasurementNoiseTests.cpp)
-foreach(navcore_test navcore_orbit_tests navcore_signal_tests navcore_receiver_tests navcore_trajectory_tests navcore_noise_tests)
+add_executable(navcore_pipeline_tests  tests/algo/BroadcastPipelineTests.cpp)
+target_link_libraries(navcore_pipeline_tests PRIVATE Qt6::Test)
+foreach(navcore_test navcore_orbit_tests navcore_signal_tests navcore_receiver_tests navcore_trajectory_tests navcore_noise_tests navcore_pipeline_tests)
     target_link_libraries(${navcore_test} PRIVATE navcore)
     add_test(NAME ${navcore_test} COMMAND ${navcore_test})
     # Qt 测试目标需要 Qt bin 在 PATH（星历测试用 QtTest 读取样本文件）
@@ -227,8 +229,9 @@ add_executable(coordinate_system_tests
     src/models/CoordinateSystem.h src/models/CoordinateSystem.cpp
 )
 target_link_libraries(coordinate_system_tests PRIVATE
-    Qt6::Core Qt6::Gui Qt6::Qml Qt6::Test)
-target_include_directories(coordinate_system_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    navcore Qt6::Core Qt6::Gui Qt6::Qml Qt6::Test)
+target_include_directories(coordinate_system_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/src/models ${CMAKE_SOURCE_DIR}/src/algo)
 add_test(NAME coordinate_system_tests COMMAND coordinate_system_tests)
 set_tests_properties(coordinate_system_tests PROPERTIES
     ENVIRONMENT "PATH=${Qt6_DIR}/../../../bin")

@@ -147,8 +147,13 @@ void RackStatusClient::onReadyRead() {
         if (!line.isEmpty()) processLine(line);
     }
 
-    if (m_buffer.size() > 16 * 1024) {
-        m_buffer = m_buffer.right(4 * 1024);
+    // 守卫：异常情况下缓冲无限增长时按"最后一个完整行的末尾"截断——
+    // 保留半行比盲目 right(4KB) 更安全（盲切会把下一帧开头切掉，
+    // 解析成垃圾帧）。$ORB 满帧约 9KB、$SAT 等小帧，128KB 上限足够
+    // 容纳数十帧的合法突发。
+    if (m_buffer.size() > 128 * 1024) {
+        const int lastNewline = m_buffer.lastIndexOf('\n');
+        m_buffer = (lastNewline >= 0) ? m_buffer.mid(lastNewline + 1) : QByteArray();
     }
 }
 
