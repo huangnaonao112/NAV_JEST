@@ -99,7 +99,7 @@ qt_add_qml_module(NAV_JEST
         src/models/TrajectoryLoader.h       src/models/TrajectoryLoader.cpp
         src/models/TransferOrbitModel.h     src/models/TransferOrbitModel.cpp
         src/models/MoonTrajectoryModel.h    src/models/MoonTrajectoryModel.cpp
-        src/models/MoonTrajectoryGeometry.h src/models/MoonTrajectoryGeometry.cpp
+        src/models/TrajectoryLineGeometry.h src/models/TrajectoryLineGeometry.cpp
         src/RackStatusClient.h              src/RackStatusClient.cpp
         src/models/CoordinateSystem.h       src/models/CoordinateSystem.cpp
         src/models/WindowPlacement.h

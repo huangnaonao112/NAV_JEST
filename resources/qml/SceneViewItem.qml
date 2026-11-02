@@ -636,35 +636,47 @@ Item {
                 }
 
                 // Orbits - 始终创建，通过 visible 控制显示（预加载优化）
+                // TrajectoryLineGeometry：单节点交叉ribbon，全量渲染无跳点
                 Repeater3D {
                     model: SatelliteModel ? SatelliteModel.orbitPaths : null
-                    delegate: OrbitLine {
+                    delegate: Model {
                         // 通过 modelData 是否为空判断可见性
                         visible: (modelData && modelData.points && modelData.points.length > 0) ? true : false
-                        points: modelData ? modelData.points : []
-                        color: modelData ? modelData.color : "transparent"
-                        thickness: modelData && modelData.thickness !== undefined ? modelData.thickness : 0.4
+                        geometry: TrajectoryLineGeometry {
+                            points: modelData ? modelData.points : []
+                            thickness: (modelData && modelData.thickness !== undefined ? modelData.thickness : 0.4) * 100  // 场景单位→km
+                        }
+                        materials: DefaultMaterial {
+                            diffuseColor: modelData ? modelData.color : "transparent"
+                            lighting: DefaultMaterial.NoLighting
+                        }
                     }
                 }
 
-                // 轨迹线渲染：使用 OrbitLine（内部会根据点数自适应采样，避免卡顿）
-                OrbitLine {
+                // 轨迹线渲染：TrajectoryLineGeometry 全量渲染，
+                // drawCount 跟随回放进度实现逐步绘制
+                Model {
                     id: trajectoryLine
                     visible: rootItem.useTrajectoryFile && rootItem.drawProgress > 1
-                    color: "#FFFFFF"
-                    thickness: 0.8
-                    points: {
-                        var n = Math.min(rootItem.drawProgress, rootItem.controlPointX.length)
-                        var arr = []
-                        arr.length = n
-                        for (var i = 0; i < n; i++) {
-                            arr[i] = Qt.vector3d(
-                                rootItem.controlPointX[i] || 0,
-                                rootItem.controlPointY[i] || 0,
-                                rootItem.controlPointZ[i] || 0
-                            )
+                    geometry: TrajectoryLineGeometry {
+                        points: {
+                            var arr = []
+                            arr.length = rootItem.controlPointX.length
+                            for (var i = 0; i < rootItem.controlPointX.length; i++) {
+                                arr[i] = Qt.vector3d(
+                                    rootItem.controlPointX[i] || 0,
+                                    rootItem.controlPointY[i] || 0,
+                                    rootItem.controlPointZ[i] || 0
+                                )
+                            }
+                            return arr
                         }
-                        return arr
+                        thickness: 80.0  // 0.8场景单位=80km
+                        drawCount: rootItem.drawProgress
+                    }
+                    materials: DefaultMaterial {
+                        diffuseColor: "#FFFFFF"
+                        lighting: DefaultMaterial.NoLighting
                     }
                 }
 

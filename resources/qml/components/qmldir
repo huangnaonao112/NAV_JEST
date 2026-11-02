@@ -11,9 +11,7 @@ OrbitDebugPanel 1.0 OrbitDebugPanel.qml
 OrbitLine 1.0 OrbitLine.qml
 ParameterInput 1.0 ParameterInput.qml
 PositionMarker 1.0 PositionMarker.qml
-ProbeTrajectory 1.0 ProbeTrajectory.qml
 SatelliteInstancer 1.0 SatelliteInstancer.qml
-TransferOrbitView 1.0 TransferOrbitView.qml
 DeceptionSignalItem 1.0 DeceptionSignalItem.qml
 LeftDock 1.0 LeftDock.qml
 RightDock 1.0 RightDock.qml

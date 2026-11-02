@@ -178,6 +178,7 @@ void MoonTrajectoryModel::flushPendingTrajectory() {
                 {"lat", point.latitude},
                 {"lon", point.longitude},
                 {"alt", point.altitude},
+                {"position", QVariant::fromValue(point.position)},
             });
         }
         // 超过最大数量时移除最旧的点

@@ -19,23 +19,20 @@ Node {
     
     readonly property real moonCenterX: 80000.0
     
-    // ========== 报文点轨迹线（红色，Geometry + 大圆弧）==========
+    // ========== 报文点轨迹线（红色，TrajectoryLineGeometry 交叉ribbon）==========
     Node {
         eulerRotation.y: moonSphere.eulerRotation.y
-        
+
         Model {
             id: messageTrajectoryLine
             visible: true
             opacity: 0.9  // 透明度，启用 OIT
-        
-            geometry: MoonTrajectoryGeometry {
+
+            geometry: TrajectoryLineGeometry {
                 id: messageTrajectoryGeometry
-                startColor: "#FF0000"
-                endColor: "#FF6600"
-                lineWidth: 2.0
-                trajectoryRadius: 1740.0
+                thickness: 30.0  // km（场景=km×0.01，30km≈0.3场景单位）
             }
-            
+
             materials: DefaultMaterial {
                 diffuseColor: "#FF0000"
                 lighting: DefaultMaterial.NoLighting
@@ -95,12 +92,13 @@ Node {
     // ========== 监听新轨迹点信号（报文点）==========
     Connections {
         target: MoonTrajectoryModel
-        // 批量信号：模型 33ms 节流 flush 后一次推送新点，逐点喂给几何体
-        // （Geometry 内部同样 33ms 缓冲，只触发一次顶点重建）
+        // 批量信号：模型 33ms 节流 flush 后一次推送新点（局部 km 坐标），
+        // km→场景单位 ×0.01 后喂给几何体（与标记点 GroundWarningItem 的换算一致）
         function onNewTrajectoryPoints(points) {
             for (var i = 0; i < points.length; ++i) {
-                var p = points[i]
-                messageTrajectoryGeometry.addTrajectoryPoint(p.lat, p.lon)
+                var p = points[i].position
+                messageTrajectoryGeometry.appendPoint(
+                    Qt.vector3d(p.x * 0.01, p.y * 0.01, p.z * 0.01))
             }
         }
         function onTrajectoryChanged() {

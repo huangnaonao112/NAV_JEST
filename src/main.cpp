@@ -25,7 +25,6 @@
 #include "models/TrajectoryLoader.h"
 #include "models/MoonTrajectoryModel.h"
 #include "models/MoonTrajectoryProvider.h"
-#include "models/MoonTrajectoryGeometry.h"
 #include "RackStatusClient.h"
 #include "models/WindowPlacement.h"
 #include "utils/SceneLogger.h"
