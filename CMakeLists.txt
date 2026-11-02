@@ -5,7 +5,7 @@ project(NAV_JEST LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Quick Quick3D Core Gui Network Sql WebSockets)
+find_package(Qt6 REQUIRED COMPONENTS Quick Quick3D Core Gui Network Sql WebSockets Test)
 
 qt_standard_project_setup()
 
@@ -196,3 +196,17 @@ foreach(navcore_test navcore_orbit_tests navcore_signal_tests navcore_receiver_t
     target_link_libraries(${navcore_test} PRIVATE navcore)
     add_test(NAME ${navcore_test} COMMAND ${navcore_test})
 endforeach()
+
+# 桥接层回归测试（QTest，无 UI）：直接断言 SignalEvaluationModel 的
+# 参数→评估结果链路，锚点值与评估页界面实测三场景一致。
+add_executable(navcore_model_tests
+    tests/model/SignalEvaluationModelTests.cpp
+    src/models/SignalEvaluationModel.h
+    src/models/SignalEvaluationModel.cpp
+)
+target_link_libraries(navcore_model_tests PRIVATE navcore Qt6::Core Qt6::Qml Qt6::Test)
+target_include_directories(navcore_model_tests PRIVATE ${CMAKE_SOURCE_DIR}/src/models)
+add_test(NAME navcore_model_tests COMMAND navcore_model_tests)
+# ctest 直接可跑：把 Qt bin 目录前置到测试进程 PATH（Qt6_DIR=.../lib/cmake/Qt6）
+set_tests_properties(navcore_model_tests PROPERTIES
+    ENVIRONMENT "PATH=${Qt6_DIR}/../../../bin\;$ENV{PATH}")
