@@ -14,11 +14,15 @@ private slots:
     void spoofingScenario();
     void spoofingPrnOutOfRange();
     void invalidProfileFallsBack();
+    void noiseOnBaselineScenario();
+    void jammingNoiseCoupling();
 };
 
 namespace
 {
-// 复位到基线场景（与评估页默认值一致）
+// 复位到基线场景（与评估页默认值一致）。
+// 锚点用例显式关闭测量噪声：界面实测的 0.000 m / 11.135 m 等数值
+// 均为无噪声确定性解，保持可精确回归。
 void resetBaseline(SignalEvaluationModel &model)
 {
     model.setProfileId(QStringLiteral("BDS_B1I"));
@@ -26,6 +30,7 @@ void resetBaseline(SignalEvaluationModel &model)
     model.setSpoofingEnabled(false);
     model.setSpoofingPrn(1);
     model.setSpoofingRangeBiasMeters(50.0);
+    model.setMeasurementNoiseEnabled(false);
     model.setTruthLatitudeDeg(39.9042);
     model.setTruthLongitudeDeg(116.4074);
     model.setTruthAltitudeMeters(50.0);
@@ -129,6 +134,55 @@ void SignalEvaluationModelTests::invalidProfileFallsBack()
     QVERIFY(model.evaluationStatus().contains(QStringLiteral("回退")));
     QVERIFY(model.receiverValid()); // 回退 BDS_B1I 后仍应正常评估
     QVERIFY(model.enabledChannelCount() == 24);
+}
+
+void SignalEvaluationModelTests::noiseOnBaselineScenario()
+{
+    SignalEvaluationModel model;
+    resetBaseline(model);
+    model.setMeasurementNoiseEnabled(true); // 参考点 42 dB-Hz，σ=1.5 m
+    model.runEvaluation();
+
+    // 开噪声后解算应偏离真值（误差>0）但保持收敛，残差反映噪声水平
+    QVERIFY(model.receiverValid());
+    QVERIFY2(model.positionErrorMeters() > 1e-3,
+             qPrintable(QStringLiteral("定位误差=%1").arg(model.positionErrorMeters())));
+    QVERIFY2(model.positionErrorMeters() < 15.0,
+             qPrintable(QStringLiteral("定位误差=%1").arg(model.positionErrorMeters())));
+    QVERIFY2(model.residualRmsMeters() > 1e-3,
+             qPrintable(QStringLiteral("残差RMS=%1").arg(model.residualRmsMeters())));
+    // 确定性：两次运行结果必须逐位一致
+    const double firstError = model.positionErrorMeters();
+    model.runEvaluation();
+    QVERIFY2(qAbs(model.positionErrorMeters() - firstError) < 1e-12,
+             qPrintable(QStringLiteral("两次评估误差不一致: %1 vs %2")
+                            .arg(firstError)
+                            .arg(model.positionErrorMeters())));
+}
+
+void SignalEvaluationModelTests::jammingNoiseCoupling()
+{
+    SignalEvaluationModel model;
+    resetBaseline(model);
+    model.setMeasurementNoiseEnabled(true);
+    model.runEvaluation();
+    const double cleanError = model.positionErrorMeters();
+
+    // 强干扰：宽带噪声 -90 dBm → 有效 C/N0 大幅下降 → 伪距噪声放大 → 误差显著增大
+    model.setInterferenceEnabled(true);
+    model.setInterferenceTypeId(QStringLiteral("BROADBAND"));
+    model.setInterferencePowerDbm(-90.0);
+    model.setInterferenceBandwidthMHz(2.0);
+    model.runEvaluation();
+
+    QVERIFY2(model.effectiveCn0DbHz() < 35.0,
+             qPrintable(QStringLiteral("强干扰有效C/N0=%1").arg(model.effectiveCn0DbHz())));
+    QVERIFY2(model.positionErrorMeters() > 2.0 * cleanError,
+             qPrintable(QStringLiteral("干扰误差=%1 未超过基线%2的2倍")
+                            .arg(model.positionErrorMeters())
+                            .arg(cleanError)));
+    QVERIFY(model.interferenceInBand());
+    QVERIFY(model.receiverValid());
 }
 
 QTEST_GUILESS_MAIN(SignalEvaluationModelTests)

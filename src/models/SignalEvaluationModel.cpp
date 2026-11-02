@@ -6,6 +6,7 @@
 
 #include <array>
 #include <cmath>
+#include <random>
 #include <vector>
 
 namespace
@@ -26,6 +27,13 @@ constexpr std::array<OrbitMath::Vector3, 8> kDemoConstellation { {
 
 // 演示场景的接收机钟差（等效距离，米），与 VirtualReceiverTests 相同。
 constexpr double kScenarioClockBiasMeters = 65.0;
+
+// 伪距热噪声模型：σ = kNoiseSigmaRefM × √(C/N0ref / C/N0eff)（线性比），
+// 参考点 42 dB-Hz 时 σ=1.5 m；确定性固定种子保证每次评估可回归。
+constexpr double kNoiseSeed = 20261102.0;
+constexpr double kNoiseSigmaRefMeters = 1.5;
+constexpr double kNoiseReferenceCn0DbHz = 42.0;
+constexpr double kNoiseSigmaMaxMeters = 30.0;
 
 double rangeMeters(const OrbitMath::Vector3 &a, const OrbitMath::Vector3 &b)
 {
@@ -95,6 +103,21 @@ void SignalEvaluationModel::runEvaluation()
 
     std::vector<NavJest::PseudorangeMeasurement> measurements;
     measurements.reserve(kDemoConstellation.size());
+
+    // 伪距测量噪声：幅度随有效 C/N0 恶化而增大（干扰→C/N0↓→噪声↑→误差↑），
+    // 固定种子 + PRN 顺序采样，结果逐次可复现
+    std::mt19937 noiseEngine(static_cast<unsigned>(kNoiseSeed));
+    double noiseSigmaMeters = 0.0;
+    if (m_measurementNoiseEnabled)
+    {
+        const double effLinear = std::pow(10.0, metrics.effectiveCn0DbHz / 10.0);
+        const double refLinear = std::pow(10.0, kNoiseReferenceCn0DbHz / 10.0);
+        noiseSigmaMeters = std::clamp(
+            kNoiseSigmaRefMeters * std::sqrt(refLinear / std::max(effLinear, 1e-9)),
+            0.0, kNoiseSigmaMaxMeters);
+    }
+    std::normal_distribution<double> noise(0.0, noiseSigmaMeters);
+
     int prn = 1;
     for (const OrbitMath::Vector3 &satellite : kDemoConstellation)
     {
@@ -106,6 +129,11 @@ void SignalEvaluationModel::runEvaluation()
         if (m_spoofingEnabled && prn == m_spoofingPrn)
         {
             pseudorange += m_spoofingRangeBiasMeters;
+        }
+        // 热噪声：每通道独立采样（顺序固定 → 确定性）
+        if (m_measurementNoiseEnabled)
+        {
+            pseudorange += noise(noiseEngine);
         }
         measurement.pseudorangeMeters = pseudorange;
         measurement.dopplerHz = (m_spoofingEnabled && prn == m_spoofingPrn)
@@ -245,6 +273,14 @@ void SignalEvaluationModel::setSpoofingRangeBiasMeters(double value)
 {
     if (qFuzzyCompare(m_spoofingRangeBiasMeters, value)) return;
     m_spoofingRangeBiasMeters = value;
+    emit configChanged();
+}
+
+bool SignalEvaluationModel::measurementNoiseEnabled() const { return m_measurementNoiseEnabled; }
+void SignalEvaluationModel::setMeasurementNoiseEnabled(bool enabled)
+{
+    if (m_measurementNoiseEnabled == enabled) return;
+    m_measurementNoiseEnabled = enabled;
     emit configChanged();
 }
 

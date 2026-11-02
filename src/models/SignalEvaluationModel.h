@@ -30,6 +30,7 @@ class SignalEvaluationModel : public QObject {
     Q_PROPERTY(int spoofingPrn READ spoofingPrn WRITE setSpoofingPrn NOTIFY configChanged)
     Q_PROPERTY(double spoofingPowerDbm READ spoofingPowerDbm WRITE setSpoofingPowerDbm NOTIFY configChanged)
     Q_PROPERTY(double spoofingRangeBiasMeters READ spoofingRangeBiasMeters WRITE setSpoofingRangeBiasMeters NOTIFY configChanged)
+    Q_PROPERTY(bool measurementNoiseEnabled READ measurementNoiseEnabled WRITE setMeasurementNoiseEnabled NOTIFY configChanged)
     Q_PROPERTY(double truthLatitudeDeg READ truthLatitudeDeg WRITE setTruthLatitudeDeg NOTIFY configChanged)
     Q_PROPERTY(double truthLongitudeDeg READ truthLongitudeDeg WRITE setTruthLongitudeDeg NOTIFY configChanged)
     Q_PROPERTY(double truthAltitudeMeters READ truthAltitudeMeters WRITE setTruthAltitudeMeters NOTIFY configChanged)
@@ -77,6 +78,8 @@ public:
     void setSpoofingPowerDbm(double value);
     double spoofingRangeBiasMeters() const;
     void setSpoofingRangeBiasMeters(double value);
+    bool measurementNoiseEnabled() const;
+    void setMeasurementNoiseEnabled(bool enabled);
     double truthLatitudeDeg() const;
     void setTruthLatitudeDeg(double value);
     double truthLongitudeDeg() const;
@@ -116,6 +119,8 @@ private:
     int m_spoofingPrn = 1;
     double m_spoofingPowerDbm = -125.0;
     double m_spoofingRangeBiasMeters = 50.0;
+    // 测量热噪声开关：按有效 C/N0 耦合伪距噪声（确定性固定种子，可回归）
+    bool m_measurementNoiseEnabled = true;
     double m_truthLatitudeDeg = 39.9042;
     double m_truthLongitudeDeg = 116.4074;
     double m_truthAltitudeMeters = 50.0;

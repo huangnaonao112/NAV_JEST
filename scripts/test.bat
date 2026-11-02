@@ -1,10 +1,12 @@
 @echo off
 REM One-click regression: build all test targets and run ctest
 REM (3 algorithm tests + 1 bridge-model QTest, millisecond-level).
-REM Usage: scripts\test.bat [Debug^|Release]  (default: Debug)
+REM Default is Release: the Debug CRT on this machine has intermittent
+REM OutputDebugString/heap-lock contention that can stall Qt debug builds.
+REM Usage: scripts\test.bat [Release^|Debug]
 setlocal
 set CONFIG=%1
-if "%CONFIG%"=="" set CONFIG=Debug
+if "%CONFIG%"=="" set CONFIG=Release
 set ROOT=%~dp0..
 
 echo [1/2] Building test targets (%CONFIG%) ...

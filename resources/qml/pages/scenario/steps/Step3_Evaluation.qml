@@ -389,6 +389,19 @@ Item {
                         Text { text: "m"; color: root.text2; font.pixelSize: 13; height: 32; verticalAlignment: Text.AlignVCenter }
                     }
 
+                    // 噪声开关行
+                    Row {
+                        spacing: 12
+
+                        CheckBox {
+                            id: evalNoiseToggle
+                            text: "测量噪声（按有效 C/N₀ 耦合，固定种子可复现）"
+                            font.pixelSize: 13
+                            checked: SignalEvaluationModel.measurementNoiseEnabled
+                            onToggled: SignalEvaluationModel.measurementNoiseEnabled = checked
+                        }
+                    }
+
                     // 运行按钮 + 状态
                     Row {
                         spacing: 12
