@@ -127,11 +127,21 @@ Item {
     }
     
     // 监听PntDataModel轨迹变化
+    // 33ms 节流：$TRJ 推流期信号密集，全量重建大数组绑定代价高，
+    // 合并到定时器单次刷新（与 MoonTrajectoryModel 节流口径一致）
+    Timer {
+        id: trajectoryThrottle
+        interval: 33
+        running: false
+        onTriggered: rootItem.updateTrajectoryFromPntModel()
+    }
+
     Connections {
         target: PntDataModel
         enabled: rootItem.visible
         function onTrajectory3DChanged() {
-            rootItem.updateTrajectoryFromPntModel()
+            if (!trajectoryThrottle.running)
+                trajectoryThrottle.start()
         }
     }
     
