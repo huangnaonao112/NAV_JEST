@@ -4,11 +4,13 @@
 #include "models/AntLightModel.h"
 #include "models/MoonTrajectoryModel.h"
 #include "models/SatelliteModel.h"
+#include "models/OrbitMessage.h"
 #include "models/ProbeMissionModel.h"
 #include "models/TransferOrbitModel.h"
 
 #include <QRegularExpression>
 #include <QDebug>
+#include "utils/SceneLogger.h"
 
 RackStatusClient::RackStatusClient(QObject *parent) : QObject(parent) {
     // 设置重连定时器 - 每3秒尝试重连一次
@@ -218,6 +220,21 @@ void RackStatusClient::processLine(const QByteArray &line) {
         if (m_pntModel) {
             m_pntModel->updateFromTraj(x, y, z);
         }
+    } else if (payload.startsWith("ORB,")) {
+        // ORB 轨道参数报文（外部解算器给出开普勒根数）→ 真实轨道显示
+        OrbitMessage::Frame frame;
+        QString err;
+        if (!OrbitMessage::parseOrbitFrame(payload, frame, err)) {
+            SCENE_LOG_ERROR("ORB", QString("parse error: %1 (len=%2)").arg(err).arg(payload.size()));
+            emit logLine(QStringLiteral("RackStatusClient ORB parse error: %1").arg(err));
+            return;
+        }
+        if (m_satelliteModel) {
+            m_satelliteModel->applyOrbitFrame(frame);
+        }
+        SCENE_LOG_CAT("ORB", QString("received %1 sats @ week %2 tow %3")
+                      .arg(frame.satellites.size()).arg(frame.week)
+                      .arg(frame.secondsOfWeek, 0, 'f', 1));
     } else if (payload.startsWith("SAT,")) {
         // SAT 卫星星下点报文
         int count;

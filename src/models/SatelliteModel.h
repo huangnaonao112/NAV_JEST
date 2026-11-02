@@ -6,6 +6,7 @@
 #include <QVector>
 #include <QVariantList>
 #include "OrbitalPhysics.h"
+#include "OrbitMessage.h"
 
 class PntDataModel;  // 前向声明
 
@@ -18,6 +19,8 @@ class SatelliteModel : public QAbstractListModel {
     Q_PROPERTY(QVariantList groundPoints READ groundPoints NOTIFY groundPointsChanged)
     Q_PROPERTY(int satelliteCount READ satelliteCount NOTIFY satelliteCountChanged)
     Q_PROPERTY(bool paused READ paused WRITE setPaused NOTIFY pausedChanged)
+    // 真实轨道模式：由 $ORB 报文驱动（外部解算器给出开普勒根数）
+    Q_PROPERTY(bool realOrbitMode READ realOrbitMode NOTIFY realOrbitModeChanged)
 public:
     enum Roles {
         PositionRole = Qt::UserRole + 1,
@@ -69,11 +72,20 @@ public:
         // 欺骗卫星相关
         bool isDeception = false;       // 是否为欺骗卫星
         bool signalActive = false;      // 干扰信号是否激活
+
+        // 真实轨道相关（$ORB 报文）
+        int health = 0;                 // 0 健康 / 1 不健康
+        double meanMotionRevPerDay = 0.0;
     };
 
     explicit SatelliteModel(QObject *parent = nullptr);
 
     Q_INVOKABLE void updateSimulation(double time);
+
+    bool realOrbitMode() const { return m_realOrbitMode; }
+
+    /// 应用一帧 $ORB 轨道参数（替代仿真星座，进入真实轨道模式）
+    void applyOrbitFrame(const OrbitMessage::Frame &frame);
     Q_INVOKABLE void addSatellite(double a, double e, double i, double raan, double w, double m0, double n, QColor color, bool visible = true);
     Q_INVOKABLE void addDeceptionSatellite(double altitude, double lat, double lon, QColor color);
     Q_INVOKABLE void updateSatellite(int index, double a, double e, double i, double raan, double w, double m0, double n);
@@ -111,6 +123,7 @@ signals:
     void groundPointsChanged();
     void satelliteCountChanged();
     void pausedChanged();
+    void realOrbitModeChanged();
 
 private:
     QVector<SatelliteData> m_satellites;
@@ -119,6 +132,16 @@ private:
     bool m_paused = false;
     QVariantList m_groundPoints;
     PntDataModel *m_pntModel = nullptr;  // 用于同步干扰点数据
+
+    // ===== 真实轨道模式（$ORB 报文）=====
+    bool m_realOrbitMode = false;
+    int m_frameWeek = 0;                 // 轨道根数参考历元（GPS 周）
+    double m_frameSecondsOfWeek = 0.0;   // 轨道根数参考历元（周内秒）
+    double m_frameSimT0 = 0.0;           // 收到该帧时的仿真时刻
+    double m_lastSubpointSync = -1.0;    // 2D 星下点上次同步的仿真时刻
+
+    // 把当前星下点同步给 2D 地图（与 3D 同源，保证一一对应）
+    void syncSubpointsToPnt(double simTime);
 
     // 轨道缓存 - 避免每帧重新计算
     mutable QVariantList m_cachedOrbitPaths;

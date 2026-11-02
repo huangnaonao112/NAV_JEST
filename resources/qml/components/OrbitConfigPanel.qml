@@ -36,6 +36,8 @@ Rectangle {
     // 使用批量设置，只触发一次 orbitPathsChanged
     function applyGroupVisibility() {
         if (!SatelliteModel) return;
+        // 真实轨道模式（$ORB）下卫星按系统配色显示，不受仿真分组开关控制
+        if (SatelliteModel.realOrbitMode) return;
         var total = SatelliteModel.satelliteCount
 
         var indices = []
@@ -61,6 +63,7 @@ Rectangle {
     Connections {
         target: SatelliteModel
         function onSatelliteCountChanged() { root.applyGroupVisibility() }
+        function onRealOrbitModeChanged() { root.applyGroupVisibility() }
     }
 
     ColumnLayout {

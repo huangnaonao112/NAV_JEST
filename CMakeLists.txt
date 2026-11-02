@@ -73,6 +73,7 @@ target_precompile_headers(earth_server_core PRIVATE
 # ---------------------------------------------------------------------------
 qt_add_executable(NAV_JEST WIN32
     src/main.cpp
+    src/models/OrbitMessage.h src/models/OrbitMessage.cpp
     src/models/OrbitalPhysics.h
     src/models/RackStatusModel.h        src/models/RackStatusModel.cpp
     src/models/MoonTrajectoryProvider.h src/models/MoonTrajectoryProvider.cpp
@@ -105,6 +106,7 @@ qt_add_qml_module(NAV_JEST
         src/models/WindowPlacement.h
 )
 target_link_libraries(NAV_JEST PRIVATE
+    navcore
     earth_server_core
     Qt6::Quick Qt6::Quick3D Qt6::Core Qt6::Gui Qt6::Network Qt6::Sql Qt6::WebSockets
 )
@@ -197,6 +199,9 @@ add_executable(navcore_noise_tests     tests/algo/MeasurementNoiseTests.cpp)
 foreach(navcore_test navcore_orbit_tests navcore_signal_tests navcore_receiver_tests navcore_trajectory_tests navcore_noise_tests)
     target_link_libraries(${navcore_test} PRIVATE navcore)
     add_test(NAME ${navcore_test} COMMAND ${navcore_test})
+    # Qt 测试目标需要 Qt bin 在 PATH（星历测试用 QtTest 读取样本文件）
+    set_tests_properties(${navcore_test} PROPERTIES
+        ENVIRONMENT "PATH=${Qt6_DIR}/../../../bin")
 endforeach()
 
 # 轨道/轨迹线几何体回归测试：校验顶点缓冲被完整写入、顶点不偏离折线，
@@ -223,6 +228,17 @@ target_link_libraries(coordinate_system_tests PRIVATE
 target_include_directories(coordinate_system_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
 add_test(NAME coordinate_system_tests COMMAND coordinate_system_tests)
 set_tests_properties(coordinate_system_tests PROPERTIES
+    ENVIRONMENT "PATH=${Qt6_DIR}/../../../bin")
+
+# $ORB 报文解析测试（接口契约：外部解算器 → 本项目）
+add_executable(orbit_message_tests
+    tests/model/OrbitMessageTests.cpp
+    src/models/OrbitMessage.h src/models/OrbitMessage.cpp
+)
+target_link_libraries(orbit_message_tests PRIVATE Qt6::Core Qt6::Test)
+target_include_directories(orbit_message_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+add_test(NAME orbit_message_tests COMMAND orbit_message_tests)
+set_tests_properties(orbit_message_tests PROPERTIES
     ENVIRONMENT "PATH=${Qt6_DIR}/../../../bin")
 
 # QML 尺度字面量静态检查：禁止新增硬编码尺度，必须引用 CoordinateSystem

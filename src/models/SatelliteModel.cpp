@@ -1,6 +1,9 @@
 #include "SatelliteModel.h"
 #include "PntDataModel.h"
 #include "CoordinateSystem.h"
+#include "OrbitMessage.h"
+#include "algo/OrbitalMechanics.h"
+#include "utils/SceneLogger.h"
 #include <QtMath>
 #include <QRandomGenerator>
 #include <QVector2D>
@@ -251,6 +254,13 @@ bool SatelliteModel::isVisible(int index) const
 
 void SatelliteModel::clear()
 {
+    const bool wasReal = m_realOrbitMode;
+    m_realOrbitMode = false;
+    m_frameWeek = 0;
+    m_frameSecondsOfWeek = 0.0;
+    m_frameSimT0 = 0.0;
+    m_lastSubpointSync = -1.0;
+
     beginResetModel();
     m_satellites.clear();
     endResetModel();
@@ -261,6 +271,111 @@ void SatelliteModel::clear()
     emit orbitPathsChanged();
     emit satelliteCountChanged();
     emit groundPointsChanged();
+    if (wasReal)
+        emit realOrbitModeChanged();
+}
+
+void SatelliteModel::applyOrbitFrame(const OrbitMessage::Frame &frame)
+{
+    if (frame.satellites.isEmpty())
+        return;
+
+    beginResetModel();
+    m_satellites.clear();
+    m_satellites.reserve(frame.satellites.size());
+
+    for (const OrbitMessage::Satellite &src : frame.satellites) {
+        SatelliteData sat;
+        sat.elements.semiMajorAxis = src.semiMajorAxisKm;
+        sat.elements.eccentricity = src.eccentricity;
+        sat.elements.inclination = src.inclinationDeg;
+        sat.elements.raan = src.raanDeg;
+        sat.elements.argPerigee = src.argumentOfPerigeeDeg;
+        sat.elements.meanAnomaly = src.meanAnomalyDeg;
+        sat.elements.meanMotion = src.meanMotionRevPerDay;
+        sat.meanMotionRevPerDay = src.meanMotionRevPerDay;
+        sat.health = src.health;
+        sat.name = src.displayName();
+        sat.visible = true;
+        sat.visualScale = 1.5;
+
+        // 分系统配色（不健康卫星用灰色，便于现场一眼识别）
+        if (src.health != 0) {
+            sat.color = QColor("#8A8A8A");
+        } else if (src.system == 'G') {
+            sat.color = QColor("#3B82F6");   // GPS 蓝
+        } else if (src.system == 'C') {
+            sat.color = QColor("#F59E0B");   // 北斗 橙
+        } else {
+            sat.color = QColor("#A78BFA");   // Galileo 紫
+        }
+        sat.elements.color = sat.color;
+
+        // propagateKepler 以真近点角为历元量：M0 → E → ν
+        const double ecc = src.eccentricity;
+        const double m0 = OrbitMath::toRadians(src.meanAnomalyDeg);
+        const double eAnom = OrbitMath::solveEccentricAnomaly(m0, ecc);
+        const double nu = std::atan2(std::sqrt(1.0 - ecc * ecc) * std::sin(eAnom),
+                                     std::cos(eAnom) - ecc);
+        sat.elements.meanAnomaly = OrbitMath::toDegrees(nu);
+
+        m_satellites.append(sat);
+    }
+    endResetModel();
+
+    m_realOrbitMode = true;
+    m_frameWeek = frame.week;
+    m_frameSecondsOfWeek = frame.secondsOfWeek;
+    m_frameSimT0 = m_elapsedTime;
+    m_lastSubpointSync = -1.0;
+
+    invalidateOrbitCache();
+    emit orbitPathsChanged();
+    emit satelliteCountChanged();
+    emit realOrbitModeChanged();
+
+    // 立即按新历元算一帧，避免界面出现"跳一下"
+    updateSimulation(m_elapsedTime);
+}
+
+void SatelliteModel::syncSubpointsToPnt(double simTime)
+{
+    if (!m_realOrbitMode || !m_pntModel)
+        return;
+    // 1 Hz 同步即可：2D 地图的星下点与 3D 同一套解算，保证一一对应
+    if (m_lastSubpointSync >= 0.0 && simTime - m_lastSubpointSync < 1.0)
+        return;
+    m_lastSubpointSync = simTime;
+
+    QStringList prns;
+    QVector<double> lats;
+    QVector<double> lons;
+    prns.reserve(m_satellites.size());
+    lats.reserve(m_satellites.size());
+    lons.reserve(m_satellites.size());
+    for (const SatelliteData &sat : m_satellites) {
+        if (!sat.visible)
+            continue;
+        prns.append(sat.name);
+        lats.append(sat.latitude);
+        lons.append(sat.longitude);
+    }
+    if (!prns.isEmpty()) {
+        m_pntModel->updateFromSat(prns.size(), prns, lats, lons);
+
+        // 2D/3D 一致性自检：首次或卫星数变化时记录一条（含经纬度范围）
+        static int lastCount = -1;
+        if (prns.size() != lastCount) {
+            lastCount = prns.size();
+            double minLat = 90, maxLat = -90, minLon = 180, maxLon = -180;
+            for (double v : lats) { minLat = qMin(minLat, v); maxLat = qMax(maxLat, v); }
+            for (double v : lons) { minLon = qMin(minLon, v); maxLon = qMax(maxLon, v); }
+            SCENE_LOG_CAT("ORB", QString("subpoints synced: %1 sats, lat %2..%3, lon %4..%5")
+                .arg(prns.size())
+                .arg(minLat, 0, 'f', 1).arg(maxLat, 0, 'f', 1)
+                .arg(minLon, 0, 'f', 1).arg(maxLon, 0, 'f', 1));
+        }
+    }
 }
 
 void SatelliteModel::updateSimulation(double time)
@@ -269,6 +384,49 @@ void SatelliteModel::updateSimulation(double time)
     if (m_paused) return;
 
     m_elapsedTime = time; // 使用外部传入的累计秒数
+
+    // ===== 真实轨道模式：$ORB 报文给出的开普勒根数 + 二体推进 =====
+    if (m_realOrbitMode) {
+        const double elapsed = m_elapsedTime - m_frameSimT0;
+        for (SatelliteData &sat : m_satellites) {
+            OrbitMath::OrbitalElements el;
+            el.semiMajorAxisKm = sat.elements.semiMajorAxis;
+            el.eccentricity = sat.elements.eccentricity;
+            el.inclinationDeg = sat.elements.inclination;
+            el.raanDeg = sat.elements.raan;
+            el.argumentOfPerigeeDeg = sat.elements.argPerigee;
+            el.trueAnomalyDeg = sat.elements.meanAnomaly;   // 见 applyOrbitFrame 的 M0→ν 转换
+            try {
+                const OrbitMath::StateVector sv = OrbitMath::propagateKepler(el, elapsed);
+                sat.position = QVector3D(float(sv.positionKm.x),
+                                         float(sv.positionKm.y),
+                                         float(sv.positionKm.z));
+            } catch (const std::exception &) {
+                continue;   // 参数非法：保持上一帧位置，不崩溃
+            }
+
+            // 星下点：位置是惯性系，需转到地固系再取大地坐标
+            const double j2000 = OrbitMessage::gpsToSecondsSinceJ2000(
+                m_frameWeek, m_frameSecondsOfWeek) + elapsed;
+            const OrbitMath::Vector3 eci{sat.position.x(), sat.position.y(), sat.position.z()};
+            const OrbitMath::Vector3 ecef = OrbitMath::eciToEcef(eci, j2000);
+            const OrbitMath::GeodeticPosition geo = OrbitMath::ecefToGeodetic(ecef);
+            sat.latitude = geo.latitudeDeg;
+            sat.longitude = geo.longitudeDeg;
+
+            const QVector3D direction = -sat.position.normalized();
+            sat.rotation = QQuaternion::fromDirection(direction, QVector3D(0, 1, 0)).toEulerAngles();
+            sat.visualScale = 1.5;
+        }
+
+        if (!m_satellites.isEmpty()) {
+            emit dataChanged(createIndex(0, 0), createIndex(m_satellites.size() - 1, 0),
+                             {PositionRole, RotationRole, LongitudeRole, LatitudeRole,
+                              PhaseRole, ScaleRole});
+        }
+        syncSubpointsToPnt(time);
+        return;
+    }
 
     // 计算地球当前的旋转角度 (60秒一圈)
     double earthRotation = fmod((m_elapsedTime / 60.0) * 360.0, 360.0);
@@ -416,6 +574,52 @@ QVariantList SatelliteModel::orbitPaths() const
     // 使用缓存，避免每帧重新计算
     if (m_orbitPathsCacheValid) {
         return m_cachedOrbitPaths;
+    }
+
+    if (m_realOrbitMode) {
+        // 真实轨道：在惯性系采样一个完整周期（闭合椭圆）。
+        // 不在地固系采样，否则轨道环会变成不闭合的弧段。
+        QVariantList realList;
+        for (const SatelliteData &sat : m_satellites) {
+            if (!sat.visible) {
+                realList.append(QVariant());
+                continue;
+            }
+            QVariantMap pathData;
+            QVariantList points;
+
+            OrbitMath::OrbitalElements el;
+            el.semiMajorAxisKm = sat.elements.semiMajorAxis;
+            el.eccentricity = sat.elements.eccentricity;
+            el.inclinationDeg = sat.elements.inclination;
+            el.raanDeg = sat.elements.raan;
+            el.argumentOfPerigeeDeg = sat.elements.argPerigee;
+            el.trueAnomalyDeg = sat.elements.meanAnomaly;
+
+            try {
+                const double a = el.semiMajorAxisKm;
+                const double period = 2.0 * M_PI
+                    * std::sqrt((a * a * a) / OrbitMath::EarthMuKm3PerSecond2);
+                const int segments = 96;
+                for (int k = 0; k <= segments; ++k) {
+                    const double t = period * double(k) / segments;
+                    const OrbitMath::StateVector sv = OrbitMath::propagateKepler(el, t);
+                    points.append(QVector3D(float(sv.positionKm.x),
+                                            float(sv.positionKm.y),
+                                            float(sv.positionKm.z)));
+                }
+            } catch (const std::exception &) {
+                // 参数非法：给空轨道，避免渲染垃圾
+            }
+
+            pathData["points"] = points;
+            pathData["color"] = sat.color;
+            pathData["thickness"] = CoordinateSystem::ORBIT_THICKNESS_KM;
+            realList.append(pathData);
+        }
+        m_cachedOrbitPaths = realList;
+        m_orbitPathsCacheValid = true;
+        return realList;
     }
 
     QVariantList list;
