@@ -170,3 +170,27 @@ if(EXISTS ${CMAKE_SOURCE_DIR}/trajectory_wgs84.json)
             ${CMAKE_SOURCE_DIR}/trajectory_wgs84.json ${RUNTIME_DIR}/
     )
 endif()
+
+# ---------------------------------------------------------------------------
+# navcore: 纯 C++17 GNSS 算法内核（自 NAV_JEST V5.5.0 移植，零 Qt 依赖）
+#   OrbitalMechanics        六根数/开普勒传播/ECI-ECEF/GMST/WGS84/地面站观测/RTN ΔV
+#   GnssSignalSimulation    24 通道信号体制/C-N0/干扰 J-S/欺骗参数数学评估
+#   VirtualReceiver         伪距最小二乘定位解算/钟差/残差 RMS
+# ---------------------------------------------------------------------------
+add_library(navcore STATIC
+    src/algo/OrbitalMechanics.h       src/algo/OrbitalMechanics.cpp
+    src/algo/GnssSignalSimulation.h   src/algo/GnssSignalSimulation.cpp
+    src/algo/VirtualReceiver.h        src/algo/VirtualReceiver.cpp
+)
+target_include_directories(navcore PUBLIC ${CMAKE_SOURCE_DIR}/src/algo)
+target_compile_features(navcore PUBLIC cxx_std_17)
+
+# 算法回归测试（纯控制台，无 Qt）：ctest -C Debug/Release
+enable_testing()
+add_executable(navcore_orbit_tests   tests/algo/OrbitalMechanicsTests.cpp)
+add_executable(navcore_signal_tests  tests/algo/GnssSignalSimulationTests.cpp)
+add_executable(navcore_receiver_tests tests/algo/VirtualReceiverTests.cpp)
+foreach(navcore_test navcore_orbit_tests navcore_signal_tests navcore_receiver_tests)
+    target_link_libraries(${navcore_test} PRIVATE navcore)
+    add_test(NAME ${navcore_test} COMMAND ${navcore_test})
+endforeach()
