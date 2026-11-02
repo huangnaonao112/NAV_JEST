@@ -93,18 +93,6 @@ public:
     Q_INVOKABLE void setPaused(bool paused);
     bool paused() const { return m_paused; }
 
-    // ---- navcore 真实轨道力学接口（OrbitMath：GMST/ECI-ECEF/WGS-84/地面站观测） ----
-    // 与视觉传播管线无关：视觉位置仍由 OrbitalPhysics 计算，接口返回真实
-    // 开普勒传播+天文转换数据，供面板/联调用。
-    Q_INVOKABLE QVariantMap navcoreState(int index, double simTimeSeconds);
-    Q_INVOKABLE QVariantList navcoreGroundTrack(int index, double simTimeSeconds,
-                                                int spanMinutes, int stepMinutes);
-    Q_INVOKABLE QVariantMap navcoreObservation(int index, double stationLatDeg,
-                                               double stationLonDeg,
-                                               double stationAltMeters,
-                                               double simTimeSeconds);
-    Q_INVOKABLE double currentSimTime() const { return m_elapsedTime; }
-
     // 设置PntDataModel引用，用于同步干扰点数据
     void setPntDataModel(PntDataModel *pntModel) { m_pntModel = pntModel; }
 

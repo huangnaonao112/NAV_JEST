@@ -5,7 +5,7 @@ project(NAV_JEST LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Quick Quick3D Core Gui Network Sql WebSockets Test)
+find_package(Qt6 REQUIRED COMPONENTS Quick Quick3D Core Gui Network Sql WebSockets)
 
 qt_standard_project_setup()
 
@@ -103,12 +103,9 @@ qt_add_qml_module(NAV_JEST
         src/RackStatusClient.h              src/RackStatusClient.cpp
         src/models/CoordinateSystem.h       src/models/CoordinateSystem.cpp
         src/models/WindowPlacement.h
-        src/models/SignalEvaluationModel.h  src/models/SignalEvaluationModel.cpp
-        src/models/RouteGeneratorModel.h    src/models/RouteGeneratorModel.cpp
 )
 target_link_libraries(NAV_JEST PRIVATE
     earth_server_core
-    navcore
     Qt6::Quick Qt6::Quick3D Qt6::Core Qt6::Gui Qt6::Network Qt6::Sql Qt6::WebSockets
 )
 target_include_directories(NAV_JEST PRIVATE ${CMAKE_SOURCE_DIR}/src)
@@ -175,66 +172,29 @@ if(EXISTS ${CMAKE_SOURCE_DIR}/trajectory_wgs84.json)
 endif()
 
 # ---------------------------------------------------------------------------
-# navcore: 纯 C++17 GNSS 算法内核（自 NAV_JEST V5.5.0 移植，零 Qt 依赖）
-#   OrbitalMechanics        六根数/开普勒传播/ECI-ECEF/GMST/WGS84/地面站观测/RTN ΔV
-#   GnssSignalSimulation    24 通道信号体制/C-N0/干扰 J-S/欺骗参数数学评估
-#   VirtualReceiver         伪距最小二乘定位解算/钟差/残差 RMS
+# navcore: 纯 C++17 GNSS 算法库（零 Qt 依赖）+ 算法回归测试。
+# 库内模块: OrbitalMechanics / GnssSignalSimulation / VirtualReceiver /
+#           TrajectoryEngine / 伪距热噪声模型(applyMeasurementNoise)。
+# 算法库独立演进，不触碰上方客户端/服务端目标。
 # ---------------------------------------------------------------------------
+find_package(Qt6 REQUIRED COMPONENTS Test)
+
 add_library(navcore STATIC
     src/algo/OrbitalMechanics.h       src/algo/OrbitalMechanics.cpp
     src/algo/GnssSignalSimulation.h   src/algo/GnssSignalSimulation.cpp
     src/algo/VirtualReceiver.h        src/algo/VirtualReceiver.cpp
-    src/algo/TrajectoryEngine.h      src/algo/TrajectoryEngine.cpp
+    src/algo/TrajectoryEngine.h       src/algo/TrajectoryEngine.cpp
 )
 target_include_directories(navcore PUBLIC ${CMAKE_SOURCE_DIR}/src/algo)
 target_compile_features(navcore PUBLIC cxx_std_17)
 
-# 算法回归测试（纯控制台，无 Qt）：ctest -C Debug/Release
 enable_testing()
-add_executable(navcore_orbit_tests   tests/algo/OrbitalMechanicsTests.cpp)
-add_executable(navcore_signal_tests  tests/algo/GnssSignalSimulationTests.cpp)
-add_executable(navcore_receiver_tests tests/algo/VirtualReceiverTests.cpp)
+add_executable(navcore_orbit_tests     tests/algo/OrbitalMechanicsTests.cpp)
+add_executable(navcore_signal_tests    tests/algo/GnssSignalSimulationTests.cpp)
+add_executable(navcore_receiver_tests  tests/algo/VirtualReceiverTests.cpp)
 add_executable(navcore_trajectory_tests tests/algo/TrajectoryEngineTests.cpp)
-foreach(navcore_test navcore_orbit_tests navcore_signal_tests navcore_receiver_tests navcore_trajectory_tests)
+add_executable(navcore_noise_tests     tests/algo/MeasurementNoiseTests.cpp)
+foreach(navcore_test navcore_orbit_tests navcore_signal_tests navcore_receiver_tests navcore_trajectory_tests navcore_noise_tests)
     target_link_libraries(${navcore_test} PRIVATE navcore)
     add_test(NAME ${navcore_test} COMMAND ${navcore_test})
 endforeach()
-
-# 桥接层回归测试（QTest，无 UI）：直接断言 SignalEvaluationModel 的
-# 参数→评估结果链路，锚点值与评估页界面实测三场景一致。
-add_executable(navcore_model_tests
-    tests/model/SignalEvaluationModelTests.cpp
-    src/models/SignalEvaluationModel.h
-    src/models/SignalEvaluationModel.cpp
-)
-target_link_libraries(navcore_model_tests PRIVATE navcore Qt6::Core Qt6::Qml Qt6::Test)
-target_include_directories(navcore_model_tests PRIVATE ${CMAKE_SOURCE_DIR}/src/models)
-add_test(NAME navcore_model_tests COMMAND navcore_model_tests)
-# ctest 直接可跑：把 Qt bin 目录前置到测试进程 PATH（Qt6_DIR=.../lib/cmake/Qt6）
-set_tests_properties(navcore_model_tests PROPERTIES
-    ENVIRONMENT "PATH=${Qt6_DIR}/../../../bin\;$ENV{PATH}")
-
-# SatelliteModel navcore 接口回归测试（QTest，无 UI）
-add_executable(navcore_satmodel_tests
-    tests/model/SatelliteModelNavcoreTests.cpp
-    src/models/SatelliteModel.h
-    src/models/SatelliteModel.cpp
-)
-target_link_libraries(navcore_satmodel_tests PRIVATE navcore Qt6::Core Qt6::Gui Qt6::Qml Qt6::Test)
-target_include_directories(navcore_satmodel_tests PRIVATE
-    ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/src/models)
-add_test(NAME navcore_satmodel_tests COMMAND navcore_satmodel_tests)
-set_tests_properties(navcore_satmodel_tests PROPERTIES
-    ENVIRONMENT "PATH=${Qt6_DIR}/../../../bin\;$ENV{PATH}")
-
-# 航路生成桥接层回归测试（QTest，无 UI）
-add_executable(navcore_route_tests
-    tests/model/RouteGeneratorModelTests.cpp
-    src/models/RouteGeneratorModel.h
-    src/models/RouteGeneratorModel.cpp
-)
-target_link_libraries(navcore_route_tests PRIVATE navcore Qt6::Core Qt6::Qml Qt6::Test)
-target_include_directories(navcore_route_tests PRIVATE ${CMAKE_SOURCE_DIR}/src/models)
-add_test(NAME navcore_route_tests COMMAND navcore_route_tests)
-set_tests_properties(navcore_route_tests PROPERTIES
-    ENVIRONMENT "PATH=${Qt6_DIR}/../../../bin\;$ENV{PATH}")

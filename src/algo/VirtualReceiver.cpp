@@ -1,8 +1,9 @@
 #include "VirtualReceiver.h"
 
 #include <algorithm>
-#include <array>
 #include <cmath>
+#include <random>
+#include <array>
 #include <limits>
 
 namespace NavJest
@@ -278,6 +279,32 @@ ReceiverSolution VirtualGnssReceiver::solvePosition(
     }
 
     return result;
+}
+
+} // namespace NavJest
+
+namespace NavJest
+{
+
+void applyMeasurementNoise(std::vector<PseudorangeMeasurement> &measurements,
+                           double effectiveCn0DbHz,
+                           const MeasurementNoiseConfig &config)
+{
+    if (measurements.empty())
+        return;
+
+    const double effectiveLinear = std::pow(10.0, effectiveCn0DbHz / 10.0);
+    const double referenceLinear =
+        std::pow(10.0, config.referenceCn0DbHz / 10.0);
+    const double sigmaMeters = std::clamp(
+        config.sigmaRefMeters
+            * std::sqrt(referenceLinear / std::max(effectiveLinear, 1e-9)),
+        0.0, config.sigmaMaxMeters);
+
+    std::mt19937 noiseEngine(config.seed);
+    std::normal_distribution<double> noise(0.0, sigmaMeters);
+    for (PseudorangeMeasurement &measurement : measurements)
+        measurement.pseudorangeMeters += noise(noiseEngine);
 }
 
 } // namespace NavJest
