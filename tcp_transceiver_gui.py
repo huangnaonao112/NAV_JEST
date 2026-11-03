@@ -87,7 +87,7 @@ class TcpTransceiverApp:
 
         # 发送频率设置
         ttk.Label(row2, text="频率:").pack(side=tk.LEFT, padx=(20, 0))
-        self.freq_var = tk.StringVar(value="1")
+        self.freq_var = tk.StringVar(value="2")
         ttk.Entry(row2, textvariable=self.freq_var, width=5).pack(side=tk.LEFT, padx=(5, 0))
         ttk.Label(row2, text="Hz").pack(side=tk.LEFT, padx=(2, 10))
 
@@ -141,6 +141,20 @@ class TcpTransceiverApp:
         if file_path:
             self.path_var.set(file_path)
             self.txt_file_path = file_path
+            self._auto_freq(file_path)
+
+    def _auto_freq(self, file_path):
+        """加载文件后自动建议发送频率：默认整个文件约 5 分钟(300 秒)发完。
+        三幕演示文件(约 600 行)配 2Hz 左右，节奏舒缓看得清。可手动改。"""
+        try:
+            with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+                n = sum(1 for l in f if l.strip())
+        except Exception:
+            return
+        if n <= 0:
+            return
+        freq = max(0.5, min(50.0, round(n / 300.0, 1)))
+        self.freq_var.set(str(freq))
 
     def on_mode_change(self, event=None):
         """模式切换时更新界面"""

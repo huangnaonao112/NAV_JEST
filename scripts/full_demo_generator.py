@@ -103,7 +103,7 @@ def main():
     ap.add_argument('--scenes', required=True,
                     help='设备方场景文件（提供 $TRJ/$MNT 素材）')
     ap.add_argument('--out', default='full_demo.txt')
-    ap.add_argument('--play-seconds', type=int, default=120,
+    ap.add_argument('--play-seconds', type=int, default=300,
                     help='建议播放时长（写入注释）')
     args = ap.parse_args()
 
