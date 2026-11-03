@@ -183,6 +183,14 @@ Item {
     onWidthChanged: { Qt.callLater(_refitZoom); Qt.callLater(() => root._logState("resize")) }
     onHeightChanged: { Qt.callLater(_refitZoom) }
 
+    // 属性级保险：视口变大导致"填满所需缩放"上升时，立刻抬升 zoomContinuous。
+    // 独立于 _initView/_refitZoom（那两条路径都依赖时机），保证任何初始化
+    // 顺序下都不会停留在"世界比视口小"的状态。
+    onMinZoomForWholeWorldChanged: {
+        if (zoomContinuous < minZoomForWholeWorld)
+            zoomContinuous = minZoomForWholeWorld
+    }
+
     // 窗口尺寸变化后的重适配：全局最小缩放随视口增大而抬高。
     // 此前只有一次性的 _initView（_initialized 后直接返回），窗口从
     // 预加载尺寸(520x720)变到全屏后最小缩放仍停留在 1.49，世界地图
