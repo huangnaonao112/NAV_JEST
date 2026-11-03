@@ -132,19 +132,20 @@ def main():
     day = 86400.0
     # 欺骗源在整个演示期间固定（曾按每快照重新挑选 → DSP-1 每帧换轨道
     # → 欺骗卫星瞬移抽搐）。选定一次：中轨取仰角最接近 45° 的 MEO，
-    # 高轨取可见 IGSO/GEO。
-    src1 = min((s for s in sats if 20000 <= s['a'] <= 30000 and s['health'] == 0),
+    # 高轨取可见 IGSO/GEO。候选 = 全部并集卫星（源文件 health 字段是
+    # "第 0 分钟是否可见"的一次性快照，不能当作静态属性再筛选一遍）。
+    src1 = min((s for s in sats if 20000 <= s['a'] <= 30000
+                and elevation(s, 0.0, BASE_LAT, BASE_LON) >= MASK_DEG),
                key=lambda s: abs(elevation(s, 0.0, BASE_LAT, BASE_LON) - 45.0),
                default=None)
-    src2 = max((s for s in sats if s['a'] > 35000 and s['health'] == 0),
+    src2 = max((s for s in sats if s['a'] > 35000
+                and elevation(s, 0.0, BASE_LAT, BASE_LON) >= MASK_DEG),
                key=lambda s: elevation(s, 0.0, BASE_LAT, BASE_LON),
                default=None)
     for i in range(N_SNAP):
         tow = i * day / N_SNAP
         vis = []
         for s in sats:
-            if s['health'] != 0:
-                continue
             if elevation(s, tow, BASE_LAT, BASE_LON) >= MASK_DEG:
                 x, y, z = sub_ecef(s, tow)
                 r = math.sqrt(x * x + y * y + z * z)
@@ -156,13 +157,11 @@ def main():
         fields = ['%d' % len(sats)]
         for s in sats:
             n_deg = math.sqrt(MU / (s['a'] ** 3)) * 180.0 / math.pi
-            # 参与定位（health=0）逐帧重估：仰角≥遮蔽角才参与，其余置 1。
-            # 真实 GNSS 行为：单星数小时升落更替，同时可见数量基本稳定。
-            # 与 $SAT 星下点用同一筛选，保证 2D/3D 可见集一致。
-            if s['health'] == 0:
-                h = 0 if elevation(s, tow, BASE_LAT, BASE_LON) >= MASK_DEG else 1
-            else:
-                h = s['health']
+            # 参与定位（health=0）逐帧重估：候选 = 源文件并集内全部卫星，
+            # 仰角≥遮蔽角才参与。真实接收机行为：全天任一时刻可见数稳定
+            # 在 30 上下（星座均匀时），个体随升落更替。与 $SAT 星下点
+            # 同一筛选，2D/3D 一致。
+            h = 0 if elevation(s, tow, BASE_LAT, BASE_LON) >= MASK_DEG else 1
             fields += ['%d' % s['prn'], s['sys'],
                        '%.3f' % s['a'], '%.7f' % s['e'],
                        '%.4f' % math.degrees(s['i0']),
@@ -232,7 +231,7 @@ def main():
     counts = []
     for i in range(0, N_SNAP, 8):
         tow = i * day / N_SNAP
-        counts.append(sum(1 for s in sats if s['health'] == 0 and
+        counts.append(sum(1 for s in sats if
                           elevation(s, tow, BASE_LAT, BASE_LON) >= MASK_DEG))
     print('幕一定位快照=%d 可见卫星=%d~%d(定位所需) 总行数=%d' %
           (N_SNAP, min(counts), max(counts), len(out)))
