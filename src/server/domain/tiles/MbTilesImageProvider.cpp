@@ -1,4 +1,5 @@
 #include "MbTilesImageProvider.h"
+#include "utils/SceneLogger.h"
 
 #include "MbTiles.h"
 
@@ -162,6 +163,16 @@ QImage MbTilesImageProvider::requestImage(const QString &id, QSize *size, const 
 
     if (img.isNull()) {
         // Outside coverage: let the background show instead of drawing debug tiles.
+        // 诊断：记录失败坐标与选中的数据源索引（0=global 1=china 2=sjz）
+        static int s_missCount = 0;
+        if (s_missCount < 200) {
+            ++s_missCount;
+            int idx = -1;
+            for (int i = 0; i < m_sources.size(); ++i)
+                if (&m_sources[i] == src) { idx = i; break; }
+            SCENE_LOG_CAT("TILEMISS", QString("z=%1 x=%2 y=%3 src=%4")
+                          .arg(z).arg(x).arg(y).arg(idx));
+        }
         return QImage();
     }
 

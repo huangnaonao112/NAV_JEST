@@ -298,6 +298,7 @@ Item {
     }
 
     Repeater {
+        id: tileRepeater
         model: tilesX * tilesY
         delegate: Image {
             asynchronous: true
@@ -309,8 +310,12 @@ Item {
             readonly property int ix: index % tilesX
             readonly property int iy: Math.floor(index / tilesX)
 
-            readonly property int tx: Math.floor(topLeftTileX) + ix
-            readonly property int ty: Math.floor(topLeftTileY) + iy
+            // 注意：topLeftTileX 因浮点误差可能是 -1e-16，
+            // 直接 Math.floor 会得到 -1，使整张地图左移一列、
+            // 右侧空出正好一列（"初始瓦片显示不完整"的根因）。
+            // 加 epsilon 再取整，保证 0.0 附近不会跨到负整数。
+            readonly property int tx: Math.floor(topLeftTileX + 1e-6) + ix
+            readonly property int ty: Math.floor(topLeftTileY + 1e-6) + iy
 
             // wrap x
             readonly property int n: Math.pow(2, zInt)
@@ -342,21 +347,60 @@ Item {
         }
     }
 
+    // 权威统计：遍历 Repeater 的实际 Image 项，报告状态与几何
+    function tileStats() {
+        var total = 0, ready = 0, loading = 0, err = 0, nul = 0
+        var missing = "", maxRight = -1e9, minLeft = 1e9, hidden = 0
+        for (var i = 0; i < tileRepeater.count; i++) {
+            var it = tileRepeater.itemAt(i)
+            if (!it) { total++; nul++; continue }
+            total++
+            if (it.status === Image.Ready) ready++
+            else if (it.status === Image.Error) { err++; if (!missing) missing = it.source }
+            else if (it.status === Image.Loading) loading++
+            else { nul++; if (!missing) missing = it.source }
+            if (!it.visible) hidden++
+            maxRight = Math.max(maxRight, it.x + it.width)
+            minLeft = Math.min(minLeft, it.x)
+        }
+        var geom = ""
+        for (var g = 0; g < Math.min(4, tileRepeater.count); g++) {
+            var gi = tileRepeater.itemAt(g)
+            if (gi) {
+                if (geom) geom += ","
+                geom += gi.x.toFixed(0) + "/" + gi.width.toFixed(0)
+                     + "/" + gi.height.toFixed(0) + "/" + (gi.visible ? "v" : "h")
+            }
+        }
+        return { total: total, ready: ready, loading: loading, err: err,
+                 nul: nul, missing: missing, maxRight: Math.round(maxRight),
+                 minLeft: Math.round(minLeft), hidden: hidden, geom: geom }
+    }
+
     // 诊断：每秒记录瓦片加载情况（布局满但画面缺块时，这里会显示 error/未加载）
     Timer {
         interval: 1000
         running: root.visible
         repeat: true
         onTriggered: {
-            var total = tilesX * tilesY
-            if (root._errorCount > 0 || root._readyCount < total) {
+            var st
+            try { st = root.tileStats() } catch (e) {
+                if (typeof SceneLogger !== "undefined")
+                    SceneLogger.logQml("TILEMAP", "stats error: " + e)
+                return
+            }
+            if (true) {   // 诊断期：无条件记录（含 ready/maxRight），便于无截图取证
                 if (typeof SceneLogger !== "undefined")
                     SceneLogger.logQml("TILEMAP",
-                        "images total=" + total + " ready=" + root._readyCount
-                        + " error=" + root._errorCount
+                        "images total=" + st.total + " ready=" + st.ready
+                        + " loading=" + st.loading + " err=" + st.err + " null=" + st.nul
                         + " zoom=" + zoomClamped.toFixed(3)
                         + " grid=" + tilesX + "x" + tilesY
-                        + (root._lastErrorTile ? (" firstErr=" + root._lastErrorTile) : ""))
+                        + " maxRight=" + st.maxRight + " hidden=" + st.hidden
+                        + " sTile=" + scaledTileSize.toFixed(1)
+                        + " topLeftX=" + topLeftTileX.toFixed(3)
+                        + " geom=" + st.geom
+                        + " firstMissing=" + (st.missing || "-"))
             }
         }
     }

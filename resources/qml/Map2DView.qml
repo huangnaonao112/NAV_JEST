@@ -153,24 +153,26 @@ covered " + (t.tilesX * t.scaledTileSize).toFixed(0)
                 + "  grid " + t.tilesX + "x" + t.tilesY
                 + ((t.tilesX * t.scaledTileSize) + 0.5 < t.width ? "  UNDERFILL" : "  ok")
                 + "
-images  ready " + t._readyCount + "/" + total
-                + "  err " + t._errorCount
-                + (t._lastErrorTile ? ("  " + t._lastErrorTile) : "")
+images  " + JSON.stringify(t.tileStats())
         } catch (e) {
             _dbgText = "diag error: " + e
         }
     }
 
     Timer {
+        id: dbgTimer
         interval: 500
-        running: typeof _mapDebug !== "undefined" && _mapDebug
+        // 默认常显（用户要求可在屏幕上直接截图取证）；批量生产时可改回
+        // running: typeof _mapDebug !== "undefined" && _mapDebug
+        running: true
         repeat: true
         triggeredOnStart: true
         onTriggered: map2DRoot._refreshDbg()
     }
 
     Rectangle {
-        visible: typeof _mapDebug !== "undefined" && _mapDebug
+        // 默认常显（诊断期）；外部想关闭时设 _mapDebug=false 的构建即可
+        visible: true
         z: 9999
         x: 12
         y: 110
