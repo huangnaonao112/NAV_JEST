@@ -257,6 +257,17 @@ int main(int argc, char *argv[])
     engine->rootContext()->setContextProperty(
         "_map2DViewMs", QVariant(map2DOk ? map2DMs : 0));
 
+    // 2D 进入后是否自动定位到接收站（默认关闭：定位会触发 refit，
+    // 掩盖"初始状态"的布局 bug）
+    engine->rootContext()->setContextProperty(
+        "_mapLocateOnSwitch",
+        QVariant(!qEnvironmentVariableIsEmpty("NAVJEST_2D_LOCATE")));
+
+    // 2D 布局诊断浮层（仅测试用途）: NAVJEST_MAP_DEBUG=1 时在 2D 视图上
+    // 显示 window/view/tile 尺寸与缩放覆盖数据，用于定位"瓦片铺不满"
+    engine->rootContext()->setContextProperty(
+        "_mapDebug", QVariant(!qEnvironmentVariableIsEmpty("NAVJEST_MAP_DEBUG")));
+
     // 相机角度钩子（仅测试用途）: NAVJEST_CAMERA_ROT_X/Y 覆盖初始俯仰/方位角，
     // 便于自动化在多角度取证轨道环渲染
     bool rotXOk = false, rotYOk = false;

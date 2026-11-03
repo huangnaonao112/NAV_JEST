@@ -25,7 +25,10 @@ Item {
         onTriggered: {
             root.simCurrentView = "2D"
             openPage("sim")
-            locateTimer.start()
+            // 注意：默认不自动定位——任何触图动作(定位/缩放/拖动)都会触发
+            // refit 从而掩盖"初始状态瓦片铺不满"的 bug。需要定位时显式开启。
+            if (typeof _mapLocateOnSwitch !== "undefined" && _mapLocateOnSwitch)
+                locateTimer.start()
         }
     }
     // 切 2D 后延时定位到模拟源($PNT 报文给出的接收站位置)

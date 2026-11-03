@@ -121,6 +121,53 @@ Item {
         }
     }
 
+    // 布局诊断浮层（NAVJEST_MAP_DEBUG=1 时显示；定位"瓦片铺不满"用）
+    Rectangle {
+        visible: typeof _mapDebug !== "undefined" && _mapDebug
+        z: 9999
+        x: 12
+        y: 64
+        radius: 6
+        color: "#CC000000"
+        border.color: "#66FFFFFF"
+        border.width: 1
+        width: dbgText.implicitWidth + 16
+        height: dbgText.implicitHeight + 12
+
+        Text {
+            id: dbgText
+            x: 8
+            y: 6
+            color: "white"
+            font.pixelSize: 12
+            font.family: "Consolas"
+            text: {
+                var t = tileMap
+                if (!t) return "tileMap: null"
+                var winW = (typeof root !== "undefined" && root.window)
+                           ? root.window.width + "x" + root.window.height : "?"
+                var par = parent ? parent.width.toFixed(0) + "x" + parent.height.toFixed(0) : "?"
+                return "window  " + winW
+                     + "
+view    " + width.toFixed(0) + "x" + height.toFixed(0)
+                     + "
+parent  " + par
+                     + "
+tile    " + t.width.toFixed(0) + "x" + t.height.toFixed(0)
+                     + "
+zoom    " + t.zoomContinuous.toFixed(3)
+                     + "  eff " + t.zoomClamped.toFixed(3)
+                     + "  minAll " + t.minZoomForWholeWorld.toFixed(3)
+                     + "
+worldPx " + (t.tileSize * Math.pow(2, t.zoomClamped)).toFixed(0)
+                     + "
+covered " + (t.tilesX * t.scaledTileSize).toFixed(0)
+                     + "  grid " + t.tilesX + "x" + t.tilesY
+                     + ((t.tilesX * t.scaledTileSize) + 0.5 < t.width ? "  UNDERFILL" : "  ok")
+            }
+        }
+    }
+
     // =========================================================================
     // 视图渲染层
     // =========================================================================
