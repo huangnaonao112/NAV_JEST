@@ -68,7 +68,7 @@ def main():
         segments.append(lines[start:end])
     head = lines[:beg_idx[0]] if beg_idx and beg_idx[0] > 0 else []
 
-    schedule = []   # (块行列表, 目标时长秒)
+    schedule = []   # (块行列表, 块时长秒)
     for seg in segments:
         chunks = build_chunks(seg)
         seg_share = len(seg) / n * args.seconds
@@ -78,9 +78,17 @@ def main():
     if head:
         schedule.insert(0, (head, 0.001))
 
-    total_chunks = len(schedule)
-    print('[player] %s: %d lines -> %d chunks, loop=%d'
-          % (args.file, n, total_chunks, args.loop), flush=True)
+    # 绝对目标时刻（相对 lap 起点）= 各块时长逐块累加。
+    # 不能写成 per*(idx+1)：三幕块时长不同，后幕的目标时刻会落后墙钟、
+    # pause 变负、整幕瞬间倾泻（环月段一闪而过，看起来"没播"）。
+    timeline = []
+    acc = 0.0
+    for chunk, per in schedule:
+        acc += per
+        timeline.append((chunk, acc))
+    total_chunks = len(timeline)
+    print('[player] %s: %d lines -> %d chunks, %.1f s total, loop=%d'
+          % (args.file, n, total_chunks, acc, args.loop), flush=True)
 
     srv = socket.socket()
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -95,7 +103,7 @@ def main():
     for lap in range(args.loop):
         t0 = time.time()
         sent = 0
-        for idx, (chunk, per) in enumerate(schedule):
+        for idx, (chunk, t_target) in enumerate(timeline):
             try:
                 conn.sendall(('\n'.join(chunk) + '\n').encode('utf-8'))
             except Exception as e:
@@ -104,8 +112,7 @@ def main():
                 return
             sent += len(chunk)
             # 匀速节拍（扣除已耗时间，避免累计漂移）
-            target = t0 + per * (idx + 1)
-            pause = target - time.time()
+            pause = t0 + t_target - time.time()
             if pause > 0:
                 time.sleep(pause)
             if idx % max(1, total_chunks // 10) == 0:
