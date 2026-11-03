@@ -1,4 +1,5 @@
 import QtQuick
+import NavModels
 
 Item {
     id: root
@@ -71,7 +72,13 @@ Item {
     }
 
     readonly property int tileSize: 256
-    readonly property real zoomClamped: Math.max(minZoom, Math.min(maxZoom + 0.999, zoomContinuous))
+    // 渲染期硬保证：世界地图必须盖满视口，否则右侧/下方会露出应用底色
+    // （"初始瓦片显示不完整"）。此前只在 _refitZoom 里抬 zoom，
+    // resize 与 refit 之间会有一帧空白；并入闸门后物理上不可能出现。
+    readonly property real zoomClamped: {
+        const fillViewport = Math.max(minZoom, minZoomForWholeWorld)
+        return Math.max(fillViewport, Math.min(maxZoom + 0.999, zoomContinuous))
+    }
     readonly property int zInt: Math.floor(zoomClamped)
     readonly property real zFrac: zoomClamped - zInt
     readonly property real scaleFactor: Math.pow(2, zFrac)
@@ -173,8 +180,8 @@ Item {
         _initView()
     }
 
-    onWidthChanged: Qt.callLater(_refitZoom)
-    onHeightChanged: Qt.callLater(_refitZoom)
+    onWidthChanged: { Qt.callLater(_refitZoom); Qt.callLater(() => root._logState("resize")) }
+    onHeightChanged: { Qt.callLater(_refitZoom) }
 
     // 窗口尺寸变化后的重适配：全局最小缩放随视口增大而抬高。
     // 此前只有一次性的 _initView（_initialized 后直接返回），窗口从
@@ -192,7 +199,25 @@ Item {
             centerLon = 0
             centerLat = 0
         }
+        _logState("refit")
         Qt.callLater(_checkBounds)
+    }
+
+    // 诊断：视口尺寸 / 缩放 / 世界像素宽 / 网格覆盖。
+    // 若 worldPx < viewportW 即"世界地图盖不住视口"（右侧露底的根因）。
+    function _logState(tag) {
+        const worldPx = tileSize * Math.pow(2, zoomClamped)
+        const covered = tilesX * scaledTileSize
+        const msg = tag + " viewport=" + width.toFixed(0) + "x" + height.toFixed(0)
+                    + " zoom=" + zoomContinuous.toFixed(3)
+                    + " eff=" + zoomClamped.toFixed(3)
+                    + " minAll=" + minZoomForWholeWorld.toFixed(3)
+                    + " worldPx=" + worldPx.toFixed(0)
+                    + " tiles=" + tilesX + "x" + tilesY
+                    + " covered=" + covered.toFixed(0)
+                    + (covered + 0.5 < width ? " ** UNDERFILL **" : " ok")
+        if (typeof SceneLogger !== "undefined")
+            SceneLogger.logQml("TILEMAP", msg)
     }
 
     function _initView() {
@@ -203,9 +228,7 @@ Item {
         centerLon = 0
         centerLat = 0
         _initialized = true
-        console.log("[TileMapView] Initialized: zoom=" + zoomContinuous.toFixed(2) +
-                    " viewport=" + width + "x" + height +
-                    " tiles=" + tilesX + "x" + tilesY)
+        _logState("init")
     }
 
     onZoomContinuousChanged: {
