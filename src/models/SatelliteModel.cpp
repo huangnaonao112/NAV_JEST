@@ -624,9 +624,18 @@ void SatelliteModel::updateSimulation(double time)
             elapsed = maxElapsed;
         else if (elapsed < -maxElapsed)
             elapsed = -maxElapsed;
+        // 地球自转补偿角（卫星位置与轨道环共用同一旋转，环在 QML 侧转同角）
+        const double spinRad =
+            -OrbitMath::EarthRotationRateRadPerSecond
+            * (m_frameSecondsOfWeek + elapsed);
         // 广播星历根数(Ω0 已吸收 GMST 偏置)经二体推进的输出即 ECEF——
         // 不能再做 GMST 旋转(重复扣地球自转, 曾致星下点错位 196°)。
         // 卫星始终出现在接收站半球, 与 2D 星下点一一对应。
+        const double spinDeg = OrbitMath::toDegrees(spinRad);
+        if (spinDeg != m_earthSpinDeg) {
+            m_earthSpinDeg = spinDeg;
+            emit earthSpinChanged();
+        }
         for (SatelliteData &sat : m_satellites) {
             // 欺骗星可见性由 $DSP active 控制；定位星由 health 控制
             sat.visible = sat.isDeception ? sat.signalActive
@@ -647,8 +656,6 @@ void SatelliteModel::updateSimulation(double time)
                 // -Ωe×tow_render(tow_render = 帧 tow + 日时间外推)。
                 // 验证：GEO 帧时刻定点不动、外推期净转 ≈0；MEO 净转 (n-Ωe)Δ ✓
                 const double towRender = m_frameSecondsOfWeek + elapsed;
-                const double spinRad =
-                    -OrbitMath::EarthRotationRateRadPerSecond * towRender;
                 const OrbitMath::Vector3 ecef =
                     OrbitMath::rotateZ(sv.positionKm, spinRad);
                 const OrbitMath::GeodeticPosition geo = OrbitMath::ecefToGeodetic(ecef);

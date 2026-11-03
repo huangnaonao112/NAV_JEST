@@ -666,6 +666,11 @@ Item {
                 Repeater3D {
                     model: SatelliteModel ? SatelliteModel.orbitPaths : null
                     delegate: Model {
+                        // 轨道环随地球自转：环缓存是周起始惯性系采样，
+                        // 卫星位置含 -Ωe×tow 自转补偿——环必须转同一角
+                        // 才能保持卫星在环上（曾因环不转致卫星滑离轨道）
+                        eulerRotation.y: SatelliteModel.realOrbitMode
+                                         ? SatelliteModel.earthSpinDeg : 0
                         // 可见性 = 环数据非空 且 该卫星当前可见。
                         // 真实模式($ORB)下卫星按 health 升/降，绑定引用
                         // visibilityEpoch 使 health 翻转时仅重估本 delegate 的

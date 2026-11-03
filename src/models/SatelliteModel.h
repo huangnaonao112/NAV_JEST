@@ -26,8 +26,10 @@ class SatelliteModel : public QAbstractListModel {
     Q_PROPERTY(int visibilityEpoch READ visibilityEpoch
                NOTIFY satellitesVisibilityChanged)
     // 当前格林尼治恒星时角 deg（真实模式逐帧更新）。轨道环缓存保持 ECI，
-    // QML 侧整体绕地轴旋转 -gmstDeg 即得地固系朝向 —— GMST 推进零重建。
-    Q_PROPERTY(double gmstDeg READ gmstDeg NOTIFY gmstChanged)
+    // 轨道环随地球自转：QML 环节点 eulerRotation.y = earthSpinDeg。
+    // 卫星位置含 -Ωe×tow 自转补偿，环缓存是周起始惯性系采样——
+    // 两者必须转同一个角才重合（曾因环不转致卫星滑离轨道环 360°/天）。
+    Q_PROPERTY(double earthSpinDeg READ earthSpinDeg NOTIFY earthSpinChanged)
 public:
     enum Roles {
         PositionRole = Qt::UserRole + 1,
@@ -91,7 +93,7 @@ public:
 
     bool realOrbitMode() const { return m_realOrbitMode; }
     int visibilityEpoch() const { return m_visibilityEpoch; }
-    double gmstDeg() const { return m_gmstDeg; }
+    double earthSpinDeg() const { return m_earthSpinDeg; }
 
     /// 真实模式下 health==0（该分钟参与定位）的卫星才可见。
     /// QML 轨道环 delegate 绑定此方法 + visibilityEpoch 实现零重建显隐。
@@ -147,7 +149,7 @@ signals:
     void pausedChanged();
     void realOrbitModeChanged();
     void satellitesVisibilityChanged();
-    void gmstChanged();
+    void earthSpinChanged();
 
 private:
     QVector<SatelliteData> m_satellites;
@@ -171,7 +173,7 @@ private:
     double m_lastSubpointSync = -1.0;    // 2D 星下点上次同步的仿真时刻
     int m_visibilityEpoch = 0;           // health 翻转计数（QML 绑定重估触发器）
     int m_orbCount = 0;                  // $ORB 星座的卫星数（欺骗星不计入，追加其后）
-    double m_gmstDeg = 0.0;              // 真实模式当前 GMST（环整体旋转用）
+    double m_earthSpinDeg = 0.0;         // 环整体旋转角 deg（=-Ωe×tow_render）
 
     // 把当前星下点同步给 2D 地图（与 3D 同源，保证一一对应）
     void syncSubpointsToPnt(double simTime);

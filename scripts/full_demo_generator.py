@@ -124,6 +124,15 @@ def main():
     out.append(frame('DUT,000002.000,1.5,0.2,2.3,0.1,3.1,0.05,0.8,0.1,1.2,0.08,2.5,0.12'))
 
     day = 86400.0
+    # 欺骗源在整个演示期间固定（曾按每快照重新挑选 → DSP-1 每帧换轨道
+    # → 欺骗卫星瞬移抽搐）。选定一次：中轨取仰角最接近 45° 的 MEO，
+    # 高轨取可见 IGSO/GEO。
+    src1 = min((s for s in sats if 20000 <= s['a'] <= 30000 and s['health'] == 0),
+               key=lambda s: abs(elevation(s, 0.0, BASE_LAT, BASE_LON) - 45.0),
+               default=None)
+    src2 = max((s for s in sats if s['a'] > 35000 and s['health'] == 0),
+               key=lambda s: elevation(s, 0.0, BASE_LAT, BASE_LON),
+               default=None)
     for i in range(N_SNAP):
         tow = i * day / N_SNAP
         vis = []
@@ -168,12 +177,6 @@ def main():
 
         # $DSP：欺骗干扰 09:00-13:00 激活（M0 随 tow 推进 → 随卫星移动）
         active = 1 if 32400.0 <= tow <= 46800.0 else 0
-        src1 = min((s for s in sats if 20000 <= s['a'] <= 30000 and s['health'] == 0),
-                   key=lambda s: abs(elevation(s, tow, BASE_LAT, BASE_LON) - 45.0),
-                   default=None)
-        src2 = max((s for s in sats if s['a'] > 35000 and s['health'] == 0),
-                   key=lambda s: elevation(s, tow, BASE_LAT, BASE_LON),
-                   default=None)
         if src1 and src2:
             n1 = math.sqrt(MU / (src1['a'] ** 3)) * 180.0 / math.pi
             n2 = math.sqrt(MU / (src2['a'] ** 3)) * 180.0 / math.pi
