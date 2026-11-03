@@ -451,10 +451,15 @@ int main(int argc, char *argv[])
                         .arg(perfRoot->property("isLoggedIn").toBool() ? "true" : "false"));
                     logWin("AFTER_LOGIN");
                 });
-                // 全屏 <-> 窗口 往返验证：还原几何必须与 AFTER_LOGIN 完全一致
-                QTimer::singleShot(2500, perfWin, [perfWin, logWin](){ logWin("BEFORE_FS"); perfWin->showFullScreen(); });
-                QTimer::singleShot(3500, perfWin, [perfWin, logWin](){ logWin("IN_FULLSCREEN"); perfWin->showNormal(); });
-                QTimer::singleShot(5000, perfWin, [perfWin, logWin](){ logWin("RESTORED"); });
+                // 全屏 <-> 窗口 往返验证：还原几何必须与 AFTER_LOGIN 完全一致。
+                // 注意：该往返会触发窗口 resize，掩盖"默认窗口直接进 2D"才出现的
+                // 布局 bug（用户实测：先全屏再进 2D 不触发）。用
+                // NAVJEST_NO_FS_CYCLE=1 可跳过，用于复现真实使用路径。
+                if (qEnvironmentVariableIsEmpty("NAVJEST_NO_FS_CYCLE")) {
+                    QTimer::singleShot(2500, perfWin, [perfWin, logWin](){ logWin("BEFORE_FS"); perfWin->showFullScreen(); });
+                    QTimer::singleShot(3500, perfWin, [perfWin, logWin](){ logWin("IN_FULLSCREEN"); perfWin->showNormal(); });
+                    QTimer::singleShot(5000, perfWin, [perfWin, logWin](){ logWin("RESTORED"); });
+                }
             });
         }
     }

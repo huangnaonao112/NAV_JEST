@@ -21,7 +21,14 @@ public:
     explicit WindowPlacement(QObject *parent = nullptr) : QObject(parent) {}
 
     // 窗口模式几何：包含 window 中心点的物理屏幕的 80% x 85% 居中区域
+    // 测试钩子：NAVJEST_WIN_SIZE=宽x高 可强制窗口几何（复现特定尺寸下的布局问题）
     Q_INVOKABLE QRect windowedGeometry(QWindow *w) const {
+        const QByteArray forced = qgetenv("NAVJEST_WIN_SIZE");
+        if (!forced.isEmpty()) {
+            const QList<QByteArray> wh = forced.split('x');
+            if (wh.size() == 2)
+                return QRect(0, 0, wh[0].toInt(), wh[1].toInt());
+        }
         QRect cur = w->geometry();
         QScreen *scr = QGuiApplication::screenAt(cur.center());
         if (!scr) scr = w->screen();

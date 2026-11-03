@@ -11,6 +11,18 @@ Item {
     anchors.fill: parent
     clip: true
 
+    // 尺寸链诊断：本视图与父容器尺寸（定位"画布比窗口窄"这类问题）
+    function _logChain(tag) {
+        var pw = parent ? parent.width.toFixed(0) + "x" + parent.height.toFixed(0) : "?"
+        if (typeof SceneLogger !== "undefined")
+            SceneLogger.logQml("MAP2D", tag + " self=" + width.toFixed(0) + "x"
+                               + height.toFixed(0) + " parent=" + pw
+                               + " window=" + (root.window ? root.window.width + "x" + root.window.height : "?"))
+    }
+    Component.onCompleted: _logChain("init")
+    onWidthChanged: _logChain("w")
+    onHeightChanged: _logChain("h")
+
     // =========================================================================
     // 状态属性
     // =========================================================================
