@@ -46,3 +46,4 @@ assets/model/*.obj
 # Logs
 *.log
 logs/
+dist/
