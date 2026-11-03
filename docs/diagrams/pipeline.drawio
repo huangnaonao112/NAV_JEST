@@ -1,0 +1,76 @@
+<mxfile host="app.diagrams.net">
+  <diagram id="pipeline" name="全链路">
+    <mxGraphModel dx="1600" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="680" math="0" shadow="0" adaptiveColors="auto">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="title" value="真实卫星数据全链路：广播星历 → $ORB 报文 → 3D/2D 显示" style="text;html=1;fontSize=20;fontStyle=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="240" y="20" width="1320" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="lane1" value="① 外部解算器（scripts/orb_day_generator.py）" style="swimlane;startSize=30;fillColor=#fff2cc;strokeColor=#d6b656;html=1;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="40" y="80" width="1520" height="150" as="geometry"/>
+        </mxCell>
+        <mxCell id="brdc" value="广播星历 RINEX3&lt;br&gt;&lt;small&gt;IGS BRDC（真实数据）&lt;/small&gt;" style="shape=cylinder3;whiteSpace=wrap;html=1;fontSize=14;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="lane1">
+          <mxGeometry x="40" y="45" width="160" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="sel" value="选星：接收站仰角筛选&lt;br&gt;&lt;small&gt;北京 39.9N/116.4E · 截止角 10° · 每分钟一帧&lt;/small&gt;" style="rounded=1;whiteSpace=wrap;html=1;fontSize=14;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="lane1">
+          <mxGeometry x="360" y="45" width="260" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="file" value="$ORB 报文文件&lt;br&gt;&lt;small&gt;playback/orb_day_full.txt（1440 帧/天，含 $BEG/$PNT/$END）&lt;/small&gt;" style="shape=mxgraph.flowchart.document;whiteSpace=wrap;html=1;fontSize=14;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="lane1">
+          <mxGeometry x="760" y="40" width="300" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="lane2" value="② 回放注入（scripts/orb_file_player.py · TCP 127.0.0.1:8000）" style="swimlane;startSize=30;fillColor=#f5f5f5;strokeColor=#999999;html=1;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="40" y="250" width="1520" height="130" as="geometry"/>
+        </mxCell>
+        <mxCell id="player" value="匀速回放&lt;br&gt;&lt;small&gt;120 秒播完一天（约 720 倍速）· 可抽稀/循环&lt;/small&gt;" style="rounded=1;whiteSpace=wrap;html=1;fontSize=14;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="lane2">
+          <mxGeometry x="360" y="35" width="260" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="parse" value="RackStatusClient&lt;br&gt;&lt;small&gt;$ORB 解析 + 单位/范围校验（OrbitMessage）&lt;/small&gt;" style="rounded=1;whiteSpace=wrap;html=1;fontSize=14;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="lane2">
+          <mxGeometry x="800" y="35" width="300" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="lane3" value="③ 仿真软件 NAV_JEST（消费报文，只渲染不解算星历）" style="swimlane;startSize=30;fillColor=#dae8fc;strokeColor=#6c8ebf;html=1;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="40" y="400" width="1520" height="170" as="geometry"/>
+        </mxCell>
+        <mxCell id="apply" value="SatelliteModel&lt;br&gt;&lt;small&gt;applyOrbitFrame：二体开普勒推进 + -Ωe×tow 地球自转&lt;/small&gt;" style="rounded=1;whiteSpace=wrap;html=1;fontSize=14;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="lane3">
+          <mxGeometry x="120" y="50" width="330" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="r3d" value="3D 渲染（地固系 ECEF）&lt;br&gt;&lt;small&gt;卫星模型 + 惯性系轨道环 · 尺寸随相机自适应&lt;/small&gt;" style="rounded=1;whiteSpace=wrap;html=1;fontSize=14;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="lane3">
+          <mxGeometry x="560" y="50" width="330" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="sub" value="星下点解算&lt;br&gt;&lt;small&gt;ECI→ECEF→WGS84 · 1 Hz 同步&lt;/small&gt;" style="rounded=1;whiteSpace=wrap;html=1;fontSize=14;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="lane3">
+          <mxGeometry x="1000" y="50" width="240" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="r2d" value="2D 地图标记&lt;br&gt;&lt;small&gt;与 3D 同源 · GPS蓝/北斗橙/Galileo紫&lt;/small&gt;" style="rounded=1;whiteSpace=wrap;html=1;fontSize=14;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="lane3">
+          <mxGeometry x="1310" y="50" width="180" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=12;labelBackgroundColor=default;defaultLabelBackgroundColor=page;" edge="1" parent="lane1" source="brdc" target="sel">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e2" value="开普勒根数" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=12;labelBackgroundColor=default;defaultLabelBackgroundColor=page;verticalAlign=bottom;labelPlacement=auto;" edge="1" parent="lane1" source="sel" target="file">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e3" value="$ORB 帧 ×288" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=12;labelBackgroundColor=default;defaultLabelBackgroundColor=page;labelPlacement=auto;" edge="1" parent="1" source="file" target="player">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e4" value="TCP" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=12;labelBackgroundColor=default;defaultLabelBackgroundColor=page;verticalAlign=bottom;labelPlacement=auto;" edge="1" parent="lane2" source="player" target="parse">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e5" value="Frame" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=12;labelBackgroundColor=default;defaultLabelBackgroundColor=page;labelPlacement=auto;" edge="1" parent="1" source="parse" target="apply">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=12;labelBackgroundColor=default;defaultLabelBackgroundColor=page;" edge="1" parent="lane3" source="apply" target="r3d">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e7" value="星下点" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=12;labelBackgroundColor=default;defaultLabelBackgroundColor=page;verticalAlign=bottom;labelPlacement=auto;" edge="1" parent="lane3" source="apply" target="sub">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e8" value="1 Hz" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=12;dashed=1;labelBackgroundColor=default;defaultLabelBackgroundColor=page;verticalAlign=bottom;labelPlacement=auto;" edge="1" parent="lane3" source="sub" target="r2d">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="note" value="可见性规则：health=0（该分钟参与定位）才显示；每分钟帧切换可见集 40~52 颗。$END 清场。" style="text;html=1;fontSize=14;align=center;" vertex="1" parent="1">
+          <mxGeometry x="240" y="590" width="1320" height="30" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
