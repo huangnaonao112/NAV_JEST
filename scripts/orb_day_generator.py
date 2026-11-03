@@ -26,9 +26,12 @@ import os
 import re
 import sys
 
-MU = 398600.4418              # km^3/s^2
-OMEGA_E = 7.2921150e-5        # rad/s
-GPS_EPOCH_J2000 = 630763200.0 # 1980-01-06 -> 2000-01-01 12:00 (s)
+# 兼容 python -I（隔离模式不把脚本目录加入 sys.path）
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from orb_common import (MU, OMEGA_E, solve_kepler, hhmmss, frame_line,
+                        elevation_deg as elevation_enu)
+
 MINUTES_PER_DAY = 1440
 
 NUM_RE = re.compile(r'[-+]?\d+\.\d+[DdEe][-+]?\d+')
@@ -83,12 +86,7 @@ def sat_ecef(rec, tow):
     n = math.sqrt(MU / a ** 3) + rec['dn']
     tk = tow - rec['toe']
     m = rec['m0'] + n * tk
-    ecc = m
-    for _ in range(30):
-        d = (ecc - e * math.sin(ecc) - m) / (1 - e * math.cos(ecc))
-        ecc -= d
-        if abs(d) < 1e-13:
-            break
+    ecc = solve_kepler(m, e)
     v = math.atan2(math.sqrt(1 - e * e) * math.sin(ecc), math.cos(ecc) - e)
     phi = v + rec['argp']
     sin2, cos2 = math.sin(2 * phi), math.cos(2 * phi)
@@ -109,24 +107,12 @@ def sat_ecef(rec, tow):
     return x, y, z
 
 
-def gmst_deg(t_j2000):
-    """IAU 多项式近似（与本项目渲染侧 greenwichMeanSiderealAngle 同量级）"""
-    t = t_j2000 / 3155760000.0   # 儒略世纪
-    g = 67310.54841 + (876600 * 3600 + 8640184.812866) * t + 0.093104 * t * t
-    return g % 360.0
-
-
 def elevation_deg(rec, tow, week, lat, lon):
     # 广播星历标准算法(含 -Ωe·toe 与 (Ω̇-Ωe)·tk 项)的输出已是 ECEF——
     # 不能再做 GMST 旋转！(曾因多转一次恒星时角导致可见集整体错位 ~105°,
-    # "北京可见"变成地球另一侧的错位集合)
+    # "北京可见"变成地球另一侧的错位集合)。ENU 投影公式在 orb_common。
     xe, ye, ze = sat_ecef(rec, tow)
-    la, lo = math.radians(lat), math.radians(lon)
-    sl, cl, so, co = math.sin(la), math.cos(la), math.sin(lo), math.cos(lo)
-    east = -so * xe + co * ye
-    north = -sl * co * xe - sl * so * ye + cl * ze
-    up = cl * co * xe + cl * so * ye + sl * ze
-    return math.degrees(math.atan2(up, math.hypot(east, north)))
+    return elevation_enu(xe, ye, ze, lat, lon)
 
 
 def build_index(recs):
@@ -148,22 +134,6 @@ def pick_record(group, tow):
         else:
             break
     return chosen
-
-
-def nmea_checksum(body):
-    cs = 0
-    for ch in body:
-        cs ^= ord(ch)
-    return '%02X' % cs
-
-
-def frame_line(body):
-    return '$%s*%s' % (body, nmea_checksum(body))
-
-
-def hhmmss(tow):
-    s = int(round(tow))
-    return '%02d%02d%02d.000' % (s // 3600, (s % 3600) // 60, s % 60)
 
 
 def main():

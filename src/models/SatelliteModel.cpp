@@ -54,25 +54,6 @@ SatelliteModel::SatelliteModel(QObject *parent) : QAbstractListModel(parent)
     addDeceptionSatellite(26560.0, 30.0, 100.0, QColor("#FF3333"));
 }
 
-void SatelliteModel::setVisualSymmetry(bool enabled)
-{
-    if (m_visualSymmetry == enabled) return;
-    m_visualSymmetry = enabled;
-    
-    // 强制重新计算所有位置和轨道线
-    updateSimulation(m_elapsedTime);
-    invalidateOrbitCache();
-    emit orbitPathsChanged();
-    emit visualSymmetryChanged();
-}
-
-void SatelliteModel::setPaused(bool paused)
-{
-    if (m_paused == paused) return;
-    m_paused = paused;
-    emit pausedChanged();
-}
-
 void SatelliteModel::addSatellite(double a, double e, double i, double raan, double w, double m0, double n, QColor color, bool visible)
 {
     beginInsertRows(QModelIndex(), m_satellites.size(), m_satellites.size());
@@ -89,7 +70,7 @@ void SatelliteModel::addSatellite(double a, double e, double i, double raan, dou
     sat.color = color;
     sat.visible = visible;
     sat.name = QString("SAT-%1").arg(m_satellites.size() + 1);
-    sat.position = OrbitalPhysics::calculatePosition(sat.elements, m_elapsedTime, m_visualSymmetry);
+    sat.position = OrbitalPhysics::calculatePosition(sat.elements, m_elapsedTime);
     
     m_satellites.append(sat);
     endInsertRows();
@@ -135,74 +116,6 @@ void SatelliteModel::addDeceptionSatellite(double altitude, double lat, double l
     emit satelliteCountChanged();
 }
 
-void SatelliteModel::updateSatellite(int index, double a, double e, double i, double raan, double w, double m0, double n)
-{
-    if (index < 0 || index >= m_satellites.size()) return;
-
-    auto &sat = m_satellites[index];
-    sat.elements.semiMajorAxis = a;
-    sat.elements.eccentricity = e;
-    sat.elements.inclination = i;
-    sat.elements.raan = raan;
-    sat.elements.argPerigee = w;
-    sat.elements.meanAnomaly = m0;
-    sat.elements.meanMotion = n;
-    
-    // 重新计算位置和旋转（必要时）
-    sat.position = OrbitalPhysics::calculatePosition(sat.elements, m_elapsedTime, m_visualSymmetry);
-    
-    QModelIndex idx = createIndex(index, 0);
-    emit dataChanged(idx, idx, {PositionRole, RotationRole});
-    
-    invalidateOrbitCache();
-    emit orbitPathsChanged();
-}
-
-void SatelliteModel::setColor(int index, QColor color)
-{
-    if (index < 0 || index >= m_satellites.size()) return;
-    
-    m_satellites[index].color = color;
-    m_satellites[index].elements.color = color;
-    
-    QModelIndex idx = createIndex(index, 0);
-    emit dataChanged(idx, idx, {ColorRole});
-    
-    invalidateOrbitCache();
-    emit orbitPathsChanged();
-}
-
-QVariantMap SatelliteModel::getElements(int index) const
-{
-    QVariantMap map;
-    if (index < 0 || index >= m_satellites.size()) return map;
-
-    const auto &sat = m_satellites[index];
-    const auto &el = sat.elements;
-    map["a"] = el.semiMajorAxis;
-    map["e"] = el.eccentricity;
-    map["i"] = el.inclination;
-    map["raan"] = el.raan;
-    map["w"] = el.argPerigee;
-    map["m0"] = el.meanAnomaly;
-    map["n"] = el.meanMotion;
-    map["color"] = sat.color;
-    return map;
-}
-
-void SatelliteModel::setVisible(int index, bool visible)
-{
-    if (index < 0 || index >= m_satellites.size()) return;
-    if (m_satellites[index].visible == visible) return;
-
-    m_satellites[index].visible = visible;
-    QModelIndex idx = createIndex(index, 0);
-    emit dataChanged(idx, idx, {VisibleRole});
-
-    invalidateOrbitCache();
-    emit orbitPathsChanged();
-}
-
 void SatelliteModel::setSignalActive(int index, bool active)
 {
     if (index < 0 || index >= m_satellites.size()) return;
@@ -218,24 +131,24 @@ void SatelliteModel::setVisibilityBatch(QVariantList indices, QVariantList visib
 {
     if (indices.size() != visibles.size()) return;
     if (indices.isEmpty()) return;
-    
+
     bool anyChanged = false;
     int minIdx = m_satellites.size();
     int maxIdx = -1;
-    
+
     for (int i = 0; i < indices.size(); ++i) {
         int idx = indices[i].toInt();
         bool vis = visibles[i].toBool();
-        
+
         if (idx < 0 || idx >= m_satellites.size()) continue;
         if (m_satellites[idx].visible == vis) continue;
-        
+
         m_satellites[idx].visible = vis;
         anyChanged = true;
         minIdx = qMin(minIdx, idx);
         maxIdx = qMax(maxIdx, idx);
     }
-    
+
     if (anyChanged) {
         // 发射一次 dataChanged 覆盖所有改变的行
         if (maxIdx >= 0) {
@@ -244,12 +157,6 @@ void SatelliteModel::setVisibilityBatch(QVariantList indices, QVariantList visib
         invalidateOrbitCache();
         emit orbitPathsChanged();
     }
-}
-
-bool SatelliteModel::isVisible(int index) const
-{
-    if (index < 0 || index >= m_satellites.size()) return false;
-    return m_satellites[index].visible;
 }
 
 void SatelliteModel::clear()
@@ -656,9 +563,6 @@ void SatelliteModel::updateJammerGroundPoint(double lat, double lon,
 
 void SatelliteModel::updateSimulation(double time)
 {
-    // 暂停时跳过计算
-    if (m_paused) return;
-
     m_elapsedTime = time; // 使用外部传入的累计秒数
 
     // ===== 真实轨道模式：$ORB 报文给出的开普勒根数 + 二体推进 =====
@@ -753,7 +657,7 @@ void SatelliteModel::updateSimulation(double time)
         // 欺骗卫星位置已经在addDeceptionSatellite中设置好，不需要重新计算
         if (!sat.isDeception) {
             // 普通卫星：使用轨道参数计算位置
-            sat.position = OrbitalPhysics::calculatePosition(sat.elements, m_elapsedTime, m_visualSymmetry);
+            sat.position = OrbitalPhysics::calculatePosition(sat.elements, m_elapsedTime);
 
             // 计算经纬度
             double lat_eci, lon_eci;
@@ -831,13 +735,6 @@ QVariantMap SatelliteModel::getGroundPoint(int index) const
 {
     if (index < 0 || index >= m_groundPoints.size()) return QVariantMap();
     return m_groundPoints[index].toMap();
-}
-
-void SatelliteModel::removeGroundPoint(int index)
-{
-    if (index < 0 || index >= m_groundPoints.size()) return;
-    m_groundPoints.removeAt(index);
-    emit groundPointsChanged();
 }
 
 int SatelliteModel::rowCount(const QModelIndex &parent) const
@@ -995,7 +892,7 @@ QVariantList SatelliteModel::orbitPaths() const
             pathData["thickness"] = CoordinateSystem::DECEPTION_ORBIT_THICKNESS_KM;
         } else {
             // 普通卫星：使用轨道参数计算
-            auto pts = OrbitalPhysics::generateOrbitPoints(sat.elements, 48, m_visualSymmetry);
+            auto pts = OrbitalPhysics::generateOrbitPoints(sat.elements, 48);
             for (const auto &p : pts) {
                 points.append(p);
             }

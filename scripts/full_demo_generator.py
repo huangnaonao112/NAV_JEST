@@ -20,84 +20,23 @@ full_demo_generator.py — 三幕连续演示报文生成器
 import argparse
 import io
 import math
+import os
+import sys
 
-MU = 398600.4418
-OMEGA_E = 7.2921150e-5
+# 兼容 python -I（隔离模式不把脚本目录加入 sys.path）
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from orb_common import (MU, frame_line, hhmmss, parse_orb_frame, sub_ecef,
+                        elevation_horizon_deg as elevation)
+
 BASE_LAT, BASE_LON = 38.0568, 114.3632   # 石家庄（sjz 瓦片 11-15 级最清晰）
 MASK_DEG = 10.0
 N_SNAP = 96                               # 一天 96 个快照（每 15 分钟）
 
 
-def cs_reduce(body):
-    c = 0
-    for ch in body:
-        c ^= ord(ch)
-    return '%02X' % c
-
-
 def frame(s):
     body = s.lstrip('$').split('*')[0]
-    return '$%s*%s' % (body, cs_reduce(body))
-
-
-def hhmmss(t):
-    s = int(round(t)) % 86400
-    return '%02d%02d%02d.000' % (s // 3600, (s % 3600) // 60, s % 60)
-
-
-def parse_orb_frame(line):
-    body = line[1:line.index('*')].split(',')
-    sats = []
-    for i in range(int(body[4])):
-        b = 5 + i * 10
-        sats.append(dict(sys=body[b + 1], prn=int(body[b]),
-                         a=float(body[b + 2]), e=float(body[b + 3]),
-                         i0=math.radians(float(body[b + 4])),
-                         raan0=math.radians(float(body[b + 5])),
-                         argp=math.radians(float(body[b + 6])),
-                         M0=math.radians(float(body[b + 7])),
-                         health=int(body[b + 9])))
-    return int(body[2]), float(body[3]), sats
-
-
-def sub_ecef(sat, tow):
-    """帧根数语义：M0 + n·tow 推进后即 ECEF（Ω0 已吸收 GMST 偏置）"""
-    a = sat['a']
-    e = sat['e']
-    n = math.sqrt(MU / a ** 3)
-    M = sat['M0'] + n * tow
-    E = M
-    for _ in range(30):
-        d = (E - e * math.sin(E) - M) / (1 - e * math.cos(E))
-        E -= d
-        if abs(d) < 1e-13:
-            break
-    nu = math.atan2(math.sqrt(1 - e * e) * math.sin(E), math.cos(E) - e)
-    u = nu + sat['argp']
-    r = a * (1 - e * math.cos(E))
-    xo, yo = r * math.cos(u), r * math.sin(u)
-    O, inc = sat['raan0'], sat['i0']
-    x = xo * math.cos(O) - yo * math.cos(inc) * math.sin(O)
-    y = xo * math.sin(O) + yo * math.cos(inc) * math.cos(O)
-    z = yo * math.sin(inc)
-    # 广播语义补地球自转：Ω0 对齐的是周起始惯性系，ECEF = 绕 Z 转
-    # −Ωe·tow（与 C++ 渲染同一约定，实测 tow=0 帧位置即真值）。
-    # 此前漏转，星下点/仰角随 tow 累积偏差（12h 达 180°），可见卫星数
-    # 一天内疯摆（1~38），$SAT 星下点在 2D 图上漂移。
-    w = -OMEGA_E * tow
-    x, y = x * math.cos(w) - y * math.sin(w), x * math.sin(w) + y * math.cos(w)
-    return x, y, z
-
-
-def elevation(sat, tow, rec_lat, rec_lon):
-    x, y, z = sub_ecef(sat, tow)
-    r = math.sqrt(x * x + y * y + z * z)
-    lon_s = math.atan2(y, x)
-    lat_s = math.asin(z / r)
-    la1, lo1 = math.radians(rec_lat), math.radians(rec_lon)
-    d = math.acos(min(1.0, math.sin(la1) * math.sin(lat_s) +
-                      math.cos(la1) * math.cos(lat_s) * math.cos(lon_s - lo1)))
-    return math.degrees(math.atan((math.cos(d) - 6371.0 / r) / math.sin(d)))
+    return frame_line(body)
 
 
 def main():

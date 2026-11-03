@@ -15,10 +15,8 @@ class SatelliteModel : public QAbstractListModel {
     QML_ELEMENT
     Q_OBJECT
     Q_PROPERTY(QVariantList orbitPaths READ orbitPaths NOTIFY orbitPathsChanged)
-    Q_PROPERTY(bool visualSymmetry READ visualSymmetry WRITE setVisualSymmetry NOTIFY visualSymmetryChanged)
     Q_PROPERTY(QVariantList groundPoints READ groundPoints NOTIFY groundPointsChanged)
     Q_PROPERTY(int satelliteCount READ satelliteCount NOTIFY satelliteCountChanged)
-    Q_PROPERTY(bool paused READ paused WRITE setPaused NOTIFY pausedChanged)
     // 真实轨道模式：由 $ORB 报文驱动（外部解算器给出开普勒根数）
     Q_PROPERTY(bool realOrbitMode READ realOrbitMode NOTIFY realOrbitModeChanged)
     // 可见性版本号：真实模式下 health 翻转（卫星升/降）时递增，
@@ -124,11 +122,6 @@ public:
     int deceptionCount() const;
     Q_INVOKABLE void addSatellite(double a, double e, double i, double raan, double w, double m0, double n, QColor color, bool visible = true);
     Q_INVOKABLE void addDeceptionSatellite(double altitude, double lat, double lon, QColor color);
-    Q_INVOKABLE void updateSatellite(int index, double a, double e, double i, double raan, double w, double m0, double n);
-    Q_INVOKABLE void setColor(int index, QColor color);
-    Q_INVOKABLE QVariantMap getElements(int index) const;
-    Q_INVOKABLE void setVisible(int index, bool visible);
-    Q_INVOKABLE bool isVisible(int index) const;
     Q_INVOKABLE void setSignalActive(int index, bool active);  // 设置干扰信号激活状态
     Q_INVOKABLE void setVisibilityBatch(QVariantList indices, QVariantList visibles);  // 批量设置
     Q_INVOKABLE void clear();
@@ -137,11 +130,8 @@ public:
     Q_INVOKABLE QVariantMap getGroundPoint(int index) const;
     /// $JAM 报文驱动：更新地面干扰机标记（位置+波纹半径 km，与 2D 同源）
     void updateJammerGroundPoint(double lat, double lon, double radiusKm);
-    Q_INVOKABLE void removeGroundPoint(int index);
 
     Q_INVOKABLE int satelliteCount() const { return m_satellites.size(); }
-    Q_INVOKABLE void setPaused(bool paused);
-    bool paused() const { return m_paused; }
 
     // 设置PntDataModel引用，用于同步干扰点数据
     void setPntDataModel(PntDataModel *pntModel) { m_pntModel = pntModel; }
@@ -151,16 +141,12 @@ public:
     QHash<int, QByteArray> roleNames() const override;
 
     QVariantList orbitPaths() const;
-    bool visualSymmetry() const { return m_visualSymmetry; }
-    void setVisualSymmetry(bool enabled);
     QVariantList groundPoints() const { return m_groundPoints; }
 
 signals:
     void orbitPathsChanged();
-    void visualSymmetryChanged();
     void groundPointsChanged();
     void satelliteCountChanged();
-    void pausedChanged();
     void realOrbitModeChanged();
     void inertialViewChanged();
     void satellitesVisibilityChanged();
@@ -169,8 +155,6 @@ signals:
 private:
     QVector<SatelliteData> m_satellites;
     double m_elapsedTime = 0;
-    bool m_visualSymmetry = true;
-    bool m_paused = false;
     QVariantList m_groundPoints;
     PntDataModel *m_pntModel = nullptr;  // 用于同步干扰点数据
 
