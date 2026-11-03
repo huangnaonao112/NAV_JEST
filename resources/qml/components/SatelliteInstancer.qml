@@ -17,16 +17,22 @@ Node {
     property string modelDir: "file:///" + appDir + "models/"
 
     // 干扰目标位置：北京附近 (116.4°E, 39.9°N)
+    // 惯性系展示下地面点随地球自转（与 EarthItem.earthSphere 同角
+    // −earthSpinDeg），欺骗波束终点必须钉在转动的地面上；地固系角度为 0。
+    readonly property real globeSpinRad: (SatelliteModel && SatelliteModel.inertialView)
+        ? -SatelliteModel.earthSpinDeg * Math.PI / 180.0 : 0.0
     readonly property vector3d jammerTargetPos: {
         // 使用 OrbitalPhysics 的坐标转换逻辑
         var latRad = 39.9 * Math.PI / 180.0
         var lonRad = 116.4 * Math.PI / 180.0
         var earthRadius = 6371.0
-        return Qt.vector3d(
+        var p = Qt.vector3d(
             earthRadius * Math.cos(latRad) * Math.sin(lonRad),
             earthRadius * Math.sin(latRad),
-            earthRadius * Math.cos(latRad) * Math.cos(lonRad)
-        )
+            earthRadius * Math.cos(latRad) * Math.cos(lonRad))
+        var c = Math.cos(globeSpinRad)
+        var s = Math.sin(globeSpinRad)
+        return Qt.vector3d(p.x * c + p.z * s, p.y, -p.x * s + p.z * c)
     }
 
     // 卫星渲染：使用 Repeater3D

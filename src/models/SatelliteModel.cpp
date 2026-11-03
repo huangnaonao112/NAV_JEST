@@ -285,6 +285,18 @@ bool SatelliteModel::isSatelliteVisible(int index) const
     return m_satellites[index].visible;
 }
 
+void SatelliteModel::setInertialView(bool on)
+{
+    if (m_inertialView == on)
+        return;
+    m_inertialView = on;
+    // 参照系切换：全部渲染位置换算方式改变，立即按新系重算一帧，
+    // 避免 QML 侧轨道环/地球已切换而卫星还在旧系位置的中间态
+    emit inertialViewChanged();
+    if (m_realOrbitMode)
+        updateSimulation(m_elapsedTime);
+}
+
 void SatelliteModel::updateDayRate(const OrbitMessage::Frame &frame)
 {
     // 由相邻两帧推算"报文日时间/真实时间"倍率：
@@ -358,12 +370,19 @@ void SatelliteModel::applyOrbitFrame(const OrbitMessage::Frame &frame)
         }
     }
     if (sameSet) {
+        bool healthChanged = false;
         for (int i = 0; i < frame.satellites.size(); ++i) {
             const OrbitMessage::Satellite &src = frame.satellites.at(i);
             SatelliteData &sat = m_satellites[i];
             sat.elements.meanAnomaly =
                 OrbitMath::meanToTrueAnomalyDeg(src.meanAnomalyDeg, src.eccentricity);
-            sat.health = src.health;
+            if (sat.health != src.health) {
+                sat.health = src.health;
+                // 与 updateSimulation 的 visible 规则保持一致，先更再触发
+                // 重估，避免 QML 读到旧值后不再刷新
+                sat.visible = (src.health == 0);
+                healthChanged = true;   // 卫星升/落更替
+            }
         }
         updateDayRate(frame);
         m_frameWeek = frame.week;
@@ -373,6 +392,10 @@ void SatelliteModel::applyOrbitFrame(const OrbitMessage::Frame &frame)
         for (int i = 0; i < frame.satellites.size(); ++i) {
             m_satellites[i].frameSimT0 = m_frameSimT0;
             m_satellites[i].frameTow = m_frameSecondsOfWeek;
+        }
+        if (healthChanged) {
+            ++m_visibilityEpoch;    // 触发 QML 环/卫星可见性绑定重估（零重建）
+            emit satellitesVisibilityChanged();
         }
         if (shapeChanged) {
             invalidateOrbitCache();
@@ -687,14 +710,22 @@ void SatelliteModel::updateSimulation(double time)
                 // -Ωe×tow_render(tow_render = 该星帧 tow + 日时间外推)。
                 // 验证：GEO 帧时刻定点不动、外推期净转 ≈0；MEO 净转 (n-Ωe)Δ ✓
                 const double towRender = tow0 + elapsed;
+                Q_UNUSED(towRender);
+                // 数据层始终按 ECEF 记（经纬度/2D 星下点与展示参照系无关）
                 const OrbitMath::Vector3 ecef =
                     OrbitMath::rotateZ(sv.positionKm, spinRad);
                 const OrbitMath::GeodeticPosition geo = OrbitMath::ecefToGeodetic(ecef);
                 sat.latitude = geo.latitudeDeg;
                 sat.longitude = geo.longitudeDeg;
                 // 渲染：标准 ECEF → 场景轴约定(λ=0→+Z, Y=北极)：scene=(y,z,x)
+                // 惯性系展示：卫星/轨道环留在惯性空间（环静止），地球+地面标记
+                // 转 +Ωe·tow（QML 侧取 −earthSpinDeg）；地固系展示（原行为）：
+                // 卫星/环转 −Ωe·tow，地球静止。
+                const OrbitMath::Vector3 &renderVec =
+                    m_inertialView ? sv.positionKm : ecef;
                 sat.position = CoordinateSystem::sceneFromEcefStd(
-                    QVector3D(float(ecef.x), float(ecef.y), float(ecef.z)));
+                    QVector3D(float(renderVec.x), float(renderVec.y),
+                              float(renderVec.z)));
             } catch (const std::exception &) {
                 continue;   // 参数非法：保持上一帧位置，不崩溃
             }

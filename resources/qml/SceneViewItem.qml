@@ -666,10 +666,12 @@ Item {
                 Repeater3D {
                     model: SatelliteModel ? SatelliteModel.orbitPaths : null
                     delegate: Model {
-                        // 轨道环随地球自转：环缓存是周起始惯性系采样，
-                        // 卫星位置含 -Ωe×tow 自转补偿——环必须转同一角
-                        // 才能保持卫星在环上（曾因环不转致卫星滑离轨道）
+                        // 轨道环与卫星必须同系：地固系下环缓存是周起始惯性系
+                        // 采样、卫星位置含 −Ωe×tow 补偿——环转同角才贴环（曾因
+                        // 环不转致卫星滑离轨道）。惯性系下卫星/环都留在惯性
+                        // 空间，环静止，改由地球自转（EarthItem）表达 −Ωe×tow。
                         eulerRotation.y: SatelliteModel.realOrbitMode
+                                         && !SatelliteModel.inertialView
                                          ? SatelliteModel.earthSpinDeg : 0
                         // 可见性 = 环数据非空 且 该卫星当前可见。
                         // 真实模式($ORB)下卫星按 health 升/降，绑定引用

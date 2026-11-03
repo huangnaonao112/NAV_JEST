@@ -80,6 +80,12 @@ def sub_ecef(sat, tow):
     x = xo * math.cos(O) - yo * math.cos(inc) * math.sin(O)
     y = xo * math.sin(O) + yo * math.cos(inc) * math.cos(O)
     z = yo * math.sin(inc)
+    # 广播语义补地球自转：Ω0 对齐的是周起始惯性系，ECEF = 绕 Z 转
+    # −Ωe·tow（与 C++ 渲染同一约定，实测 tow=0 帧位置即真值）。
+    # 此前漏转，星下点/仰角随 tow 累积偏差（12h 达 180°），可见卫星数
+    # 一天内疯摆（1~38），$SAT 星下点在 2D 图上漂移。
+    w = -OMEGA_E * tow
+    x, y = x * math.cos(w) - y * math.sin(w), x * math.sin(w) + y * math.cos(w)
     return x, y, z
 
 
@@ -150,13 +156,20 @@ def main():
         fields = ['%d' % len(sats)]
         for s in sats:
             n_deg = math.sqrt(MU / (s['a'] ** 3)) * 180.0 / math.pi
+            # 参与定位（health=0）逐帧重估：仰角≥遮蔽角才参与，其余置 1。
+            # 真实 GNSS 行为：单星数小时升落更替，同时可见数量基本稳定。
+            # 与 $SAT 星下点用同一筛选，保证 2D/3D 可见集一致。
+            if s['health'] == 0:
+                h = 0 if elevation(s, tow, BASE_LAT, BASE_LON) >= MASK_DEG else 1
+            else:
+                h = s['health']
             fields += ['%d' % s['prn'], s['sys'],
                        '%.3f' % s['a'], '%.7f' % s['e'],
                        '%.4f' % math.degrees(s['i0']),
                        '%.4f' % math.degrees(s['raan0']),
                        '%.4f' % math.degrees(s['argp']),
                        '%.4f' % ((math.degrees(s['M0']) + n_deg * tow) % 360.0),
-                       '1.0027', '%d' % s['health']]
+                       '1.0027', '%d' % h]
         out.append(frame('ORB,%s,%d,%.3f,%s' % (hhmmss(tow), week, tow, ','.join(fields))))
 
         # $SAT：可见卫星星下点（真实解算，在动）→ 2D

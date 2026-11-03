@@ -101,6 +101,14 @@ public:
     int visibilityEpoch() const { return m_visibilityEpoch; }
     double earthSpinDeg() const { return m_earthSpinDeg; }
 
+    /// 展示参照系：true=惯性系（地球+地面标记自转 +Ωe·tow，轨道环静止），
+    /// false=地固系（地球静止，轨道环随 −Ωe·tow 转）。两种模式下卫星
+    /// 经纬度/2D 星下点始终按 ECEF 计算，仅渲染取位不同。
+    Q_PROPERTY(bool inertialView READ inertialView
+               WRITE setInertialView NOTIFY inertialViewChanged)
+    bool inertialView() const { return m_inertialView; }
+    void setInertialView(bool on);
+
     /// 真实模式下 health==0（该分钟参与定位）的卫星才可见。
     /// QML 轨道环 delegate 绑定此方法 + visibilityEpoch 实现零重建显隐。
     Q_INVOKABLE bool isSatelliteVisible(int index) const;
@@ -154,6 +162,7 @@ signals:
     void satelliteCountChanged();
     void pausedChanged();
     void realOrbitModeChanged();
+    void inertialViewChanged();
     void satellitesVisibilityChanged();
     void earthSpinChanged();
 
@@ -180,6 +189,7 @@ private:
     int m_visibilityEpoch = 0;           // health 翻转计数（QML 绑定重估触发器）
     int m_orbCount = 0;                  // $ORB 星座的卫星数（欺骗星不计入，追加其后）
     double m_earthSpinDeg = 0.0;         // 环整体旋转角 deg（=-Ωe×tow_render）
+    bool m_inertialView = true;          // 展示参照系：惯性系(地球自转)/地固系
 
     // 把当前星下点同步给 2D 地图（与 3D 同源，保证一一对应）
     void syncSubpointsToPnt(double simTime);

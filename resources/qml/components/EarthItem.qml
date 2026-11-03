@@ -19,6 +19,10 @@ Node {
     // Main Earth Body
     Model {
         id: earthSphere
+        // 惯性系展示：地球自转（−earthSpinDeg = +Ωe·tow），下方地面标记
+        // 节点绑定本属性自动跟随；地固系展示：地球静止，轨道环在场景侧转。
+        eulerRotation.y: (SatelliteModel && SatelliteModel.inertialView)
+                         ? -SatelliteModel.earthSpinDeg : 0
         source: "#Sphere"
         materials: PrincipledMaterial {
             baseColor: "#ffffff"

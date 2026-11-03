@@ -22,6 +22,7 @@ add_library(earth_server_core STATIC
     src/server/api/WsHub.h                         src/server/api/WsHub.cpp
     src/server/infra/Db.h                          src/server/infra/Db.cpp
     src/server/infra/PasswordHasher.h              src/server/infra/PasswordHasher.cpp
+    src/utils/SceneLogger.h
     src/server/domain/device/DeviceRepository.h    src/server/domain/device/DeviceRepository.cpp
     src/server/domain/scene/SceneRepository.h      src/server/domain/scene/SceneRepository.cpp
     src/server/domain/scene/SceneConfigRepository.h src/server/domain/scene/SceneConfigRepository.cpp
@@ -104,7 +105,6 @@ qt_add_qml_module(NAV_JEST
         src/RackStatusClient.h              src/RackStatusClient.cpp
         src/models/CoordinateSystem.h       src/models/CoordinateSystem.cpp
         src/models/WindowPlacement.h
-        src/utils/SceneLogger.h
 )
 target_link_libraries(NAV_JEST PRIVATE
     navcore
