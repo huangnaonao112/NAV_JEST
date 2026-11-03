@@ -71,6 +71,11 @@ Item {
         return u
     }
 
+    // 瓦片加载统计（诊断"布局满但画面空白/缺块"）
+    property int _readyCount: 0
+    property int _errorCount: 0
+    property string _lastErrorTile: ""
+
     readonly property int tileSize: 256
     // 渲染期硬保证：世界地图必须盖满视口，否则右侧/下方会露出应用底色
     // （"初始瓦片显示不完整"）。此前只在 _refitZoom 里抬 zoom，
@@ -325,6 +330,34 @@ Item {
 
             source: yValid ? tileUrl(zInt, wx, ty) : ""
             visible: yValid
+            onStatusChanged: {
+                if (status === Image.Ready)
+                    root._readyCount++
+                else if (status === Image.Error) {
+                    root._errorCount++
+                    if (root._lastErrorTile === "")
+                        root._lastErrorTile = "z" + zInt + "/" + wx + "/" + ty
+                }
+            }
+        }
+    }
+
+    // 诊断：每秒记录瓦片加载情况（布局满但画面缺块时，这里会显示 error/未加载）
+    Timer {
+        interval: 1000
+        running: root.visible
+        repeat: true
+        onTriggered: {
+            var total = tilesX * tilesY
+            if (root._errorCount > 0 || root._readyCount < total) {
+                if (typeof SceneLogger !== "undefined")
+                    SceneLogger.logQml("TILEMAP",
+                        "images total=" + total + " ready=" + root._readyCount
+                        + " error=" + root._errorCount
+                        + " zoom=" + zoomClamped.toFixed(3)
+                        + " grid=" + tilesX + "x" + tilesY
+                        + (root._lastErrorTile ? (" firstErr=" + root._lastErrorTile) : ""))
+            }
         }
     }
 

@@ -121,14 +121,61 @@ Item {
         }
     }
 
-    // 布局诊断浮层（NAVJEST_MAP_DEBUG=1 时显示；定位"瓦片铺不满"用）
+    // 布局诊断浮层（NAVJEST_MAP_DEBUG=1 时显示；定位"瓦片铺不满"用）。
+    // 用 Timer 刷新 + try/catch，避免绑定求值异常导致整块文字为空。
+    property string _dbgText: "diagnostics..."
+
+    function _refreshDbg() {
+        try {
+            var t = tileMap
+            if (!t) { _dbgText = "tileMap: null"; return }
+            var winW = "?"
+            try {
+                if (map2DRoot.window) winW = map2DRoot.window.width + "x" + map2DRoot.window.height
+            } catch (e) { winW = "?" }
+            var par = parent ? parent.width.toFixed(0) + "x" + parent.height.toFixed(0) : "?"
+            var total = t.tilesX * t.tilesY
+            _dbgText = "window  " + winW
+                + "
+view    " + width.toFixed(0) + "x" + height.toFixed(0)
+                + "
+parent  " + par
+                + "
+tile    " + t.width.toFixed(0) + "x" + t.height.toFixed(0)
+                + "
+zoom    " + t.zoomContinuous.toFixed(3)
+                + "  eff " + t.zoomClamped.toFixed(3)
+                + "  minAll " + t.minZoomForWholeWorld.toFixed(3)
+                + "
+worldPx " + (t.tileSize * Math.pow(2, t.zoomClamped)).toFixed(0)
+                + "
+covered " + (t.tilesX * t.scaledTileSize).toFixed(0)
+                + "  grid " + t.tilesX + "x" + t.tilesY
+                + ((t.tilesX * t.scaledTileSize) + 0.5 < t.width ? "  UNDERFILL" : "  ok")
+                + "
+images  ready " + t._readyCount + "/" + total
+                + "  err " + t._errorCount
+                + (t._lastErrorTile ? ("  " + t._lastErrorTile) : "")
+        } catch (e) {
+            _dbgText = "diag error: " + e
+        }
+    }
+
+    Timer {
+        interval: 500
+        running: typeof _mapDebug !== "undefined" && _mapDebug
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: map2DRoot._refreshDbg()
+    }
+
     Rectangle {
         visible: typeof _mapDebug !== "undefined" && _mapDebug
         z: 9999
         x: 12
-        y: 64
+        y: 110
         radius: 6
-        color: "#CC000000"
+        color: "#DD000000"
         border.color: "#66FFFFFF"
         border.width: 1
         width: dbgText.implicitWidth + 16
@@ -141,30 +188,7 @@ Item {
             color: "white"
             font.pixelSize: 12
             font.family: "Consolas"
-            text: {
-                var t = tileMap
-                if (!t) return "tileMap: null"
-                var winW = (typeof root !== "undefined" && root.window)
-                           ? root.window.width + "x" + root.window.height : "?"
-                var par = parent ? parent.width.toFixed(0) + "x" + parent.height.toFixed(0) : "?"
-                return "window  " + winW
-                     + "
-view    " + width.toFixed(0) + "x" + height.toFixed(0)
-                     + "
-parent  " + par
-                     + "
-tile    " + t.width.toFixed(0) + "x" + t.height.toFixed(0)
-                     + "
-zoom    " + t.zoomContinuous.toFixed(3)
-                     + "  eff " + t.zoomClamped.toFixed(3)
-                     + "  minAll " + t.minZoomForWholeWorld.toFixed(3)
-                     + "
-worldPx " + (t.tileSize * Math.pow(2, t.zoomClamped)).toFixed(0)
-                     + "
-covered " + (t.tilesX * t.scaledTileSize).toFixed(0)
-                     + "  grid " + t.tilesX + "x" + t.tilesY
-                     + ((t.tilesX * t.scaledTileSize) + 0.5 < t.width ? "  UNDERFILL" : "  ok")
-            }
+            text: map2DRoot._dbgText
         }
     }
 
