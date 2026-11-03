@@ -309,8 +309,14 @@ void SatelliteModel::updateDayRate(const OrbitMessage::Frame &frame)
     else if (dayDelta > 302400.0)
         dayDelta -= 604800.0;
     const double wallDelta = m_elapsedTime - prevArrival;
-    if (wallDelta > 0.02 && dayDelta > 0.0 && dayDelta <= 7200.0) {
-        const double instant = dayDelta / wallDelta;
+    // 合包突发防护：若干行报文被 TCP 拼成一包时，帧到达间隔可缩到毫秒级，
+    // 瞬时倍率会虚高几十倍并把 EMA 带偏（外推过冲→下一帧回跳→左右闪动）。
+    //   1) 间隔 <50ms 的帧只采纳数据、不参与倍率学习（沿用上一倍率）；
+    //   2) 单样本瞬时倍率限幅在当前倍率的 [1/4, 4] 倍，防单帧带偏。
+    if (wallDelta >= 0.05 && dayDelta > 0.0 && dayDelta <= 7200.0) {
+        double instant = dayDelta / wallDelta;
+        if (m_rateEmaInit)
+            instant = qBound(m_dayRate * 0.25, instant, m_dayRate * 4.0);
         if (!m_rateEmaInit) {
             m_rateEma = instant;
             m_rateEmaInit = true;
@@ -363,6 +369,11 @@ void SatelliteModel::applyOrbitFrame(const OrbitMessage::Frame &frame)
         m_frameWeek = frame.week;
         m_frameSecondsOfWeek = frame.secondsOfWeek;
         m_frameSimT0 = m_elapsedTime;
+        // 逐星锚点与全局帧基准同步（M0 与 tow 同帧到达，天然一致）
+        for (int i = 0; i < frame.satellites.size(); ++i) {
+            m_satellites[i].frameSimT0 = m_frameSimT0;
+            m_satellites[i].frameTow = m_frameSecondsOfWeek;
+        }
         if (shapeChanged) {
             invalidateOrbitCache();
             emit orbitPathsChanged();
@@ -425,6 +436,12 @@ void SatelliteModel::applyOrbitFrame(const OrbitMessage::Frame &frame)
     m_frameWeek = frame.week;
     m_frameSecondsOfWeek = frame.secondsOfWeek;
     m_frameSimT0 = m_elapsedTime;
+    // 逐星锚点：$ORB 星随本帧锚定；保留的欺骗星维持自己的 $DSP 锚点
+    for (int i = 0; i < m_satellites.size(); ++i) {
+        if (m_satellites[i].isDeception) continue;
+        m_satellites[i].frameSimT0 = m_frameSimT0;
+        m_satellites[i].frameTow = m_frameSecondsOfWeek;
+    }
     m_lastSubpointSync = -1.0;
 
     invalidateOrbitCache();
@@ -481,6 +498,13 @@ void SatelliteModel::applyDeceptionFrame(
         existing->elements.meanAnomaly =
             OrbitMath::meanToTrueAnomalyDeg(e.M0Deg, e.e);
         existing->visualScale = 1.2;
+
+        // 逐星锚点：M0 与 tow 必须成对锚定。生成器按 "$DSP 的 M 步长 =
+        // n(a)×快照 tow 步长" 制作，锚点切换时惯性 M 与地球自转角同时
+        // 连续，ECEF 位置无缝衔接。若沿用全局基准（$ORB 的 tow/时刻），
+        // 快照内 $ORB 先到 ~1s 会拿新 tow 配旧 M，位置先跳后回——左右闪动。
+        existing->frameSimT0 = m_elapsedTime;
+        existing->frameTow = m_frameSecondsOfWeek;
 
         // 帧时刻初始位置（二体 ν(M0) 处，标准 ECEF → 场景轴序）
         try {
@@ -617,29 +641,36 @@ void SatelliteModel::updateSimulation(double time)
     // ===== 真实轨道模式：$ORB 报文给出的开普勒根数 + 二体推进 =====
     if (m_realOrbitMode) {
         // 按报文日时间推进（回放时 dayRate>1，一天被压缩到几分钟）。
-        // 外推量钳制在约两帧的日时间内：即使倍率抖动，位置也不会甩飞
-        double elapsed = (m_elapsedTime - m_frameSimT0) * m_dayRate;
+        // 外推量钳制在约两帧的日时间内：即使倍率抖动，位置也不会甩飞。
+        // 每颗星用自己的帧锚点（M0 与 tow 同帧到达的那一帧）外推：
+        // 全局基准只对 $ORB 星成立，$DSP 星的 M 与全局 tow 相差一个
+        // 快照内错位，会造成位置来回跳。
         const double maxElapsed = m_lastDayDelta * 2.0;
-        if (elapsed > maxElapsed)
-            elapsed = maxElapsed;
-        else if (elapsed < -maxElapsed)
-            elapsed = -maxElapsed;
-        // 地球自转补偿角（卫星位置与轨道环共用同一旋转，环在 QML 侧转同角）
-        const double spinRad =
-            -OrbitMath::EarthRotationRateRadPerSecond
-            * (m_frameSecondsOfWeek + elapsed);
-        // 广播星历根数(Ω0 已吸收 GMST 偏置)经二体推进的输出即 ECEF——
-        // 不能再做 GMST 旋转(重复扣地球自转, 曾致星下点错位 196°)。
-        // 卫星始终出现在接收站半球, 与 2D 星下点一一对应。
-        const double spinDeg = OrbitMath::toDegrees(spinRad);
-        if (spinDeg != m_earthSpinDeg) {
-            m_earthSpinDeg = spinDeg;
-            emit earthSpinChanged();
-        }
         for (SatelliteData &sat : m_satellites) {
             // 欺骗星可见性由 $DSP active 控制；定位星由 health 控制
             sat.visible = sat.isDeception ? sat.signalActive
                                           : (sat.health == 0);
+            // 逐星时间基准（M0 与 tow 同帧锚定，见 applyDeceptionFrame）
+            const double t0 = sat.frameSimT0 >= 0.0 ? sat.frameSimT0
+                                                    : m_frameSimT0;
+            const double tow0 = sat.frameSimT0 >= 0.0 ? sat.frameTow
+                                                      : m_frameSecondsOfWeek;
+            double elapsed = (m_elapsedTime - t0) * m_dayRate;
+            if (elapsed > maxElapsed)
+                elapsed = maxElapsed;
+            else if (elapsed < -maxElapsed)
+                elapsed = -maxElapsed;
+            // 地球自转补偿角（卫星位置与轨道环共用同一旋转，环在 QML 侧转同角）
+            const double spinRad =
+                -OrbitMath::EarthRotationRateRadPerSecond * (tow0 + elapsed);
+            // 广播星历根数(Ω0 已吸收 GMST 偏置)经二体推进的输出即 ECEF——
+            // 不能再做 GMST 旋转(重复扣地球自转, 曾致星下点错位 196°)。
+            // 卫星始终出现在接收站半球, 与 2D 星下点一一对应。
+            const double spinDeg = OrbitMath::toDegrees(spinRad);
+            if (spinDeg != m_earthSpinDeg && !sat.isDeception) {
+                m_earthSpinDeg = spinDeg;   // 环旋转跟随 $ORB 星（数量占多数）
+                emit earthSpinChanged();
+            }
             OrbitMath::OrbitalElements el;
             el.semiMajorAxisKm = sat.elements.semiMajorAxis;
             el.eccentricity = sat.elements.eccentricity;
@@ -653,9 +684,9 @@ void SatelliteModel::updateSimulation(double time)
                 // GPS 广播约定：帧根数的 Ω0 已对齐"周起始"，广播算法烧进
                 // -Ωe×tow(周内秒) —— 实测 tow=0 帧位置即真值、 tow>0 帧多转
                 // +Ωe×tow。因此渲染 ECEF = 惯性推进位置绕地轴(Z)转
-                // -Ωe×tow_render(tow_render = 帧 tow + 日时间外推)。
+                // -Ωe×tow_render(tow_render = 该星帧 tow + 日时间外推)。
                 // 验证：GEO 帧时刻定点不动、外推期净转 ≈0；MEO 净转 (n-Ωe)Δ ✓
-                const double towRender = m_frameSecondsOfWeek + elapsed;
+                const double towRender = tow0 + elapsed;
                 const OrbitMath::Vector3 ecef =
                     OrbitMath::rotateZ(sv.positionKm, spinRad);
                 const OrbitMath::GeodeticPosition geo = OrbitMath::ecefToGeodetic(ecef);

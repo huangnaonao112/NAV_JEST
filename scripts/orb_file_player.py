@@ -19,6 +19,29 @@ import sys
 import time
 
 
+def build_chunks(lines):
+    """把行聚合成"快照块"：块内行一次性写入，块间才是节拍间隔。
+
+    第一幕每快照 = $DEV/$ANT/... + $ORB + $SAT + $PNT + $DSP 多行，若按行
+    匀速发送，$ORB（重置时间基准 tow）与 $DSP（更新欺骗星 M）会错开数秒
+    到达，且 TCP 合包让帧间隔抖动、倍率外推过冲——两者都会造成 3D 欺骗
+    卫星左右闪动。以帧起始行（$ORB/$TRJ/$MNT）分块后：
+      块内原子（快照内 M 与 tow 同批到达），块间间隔均匀。
+    各幕时间占比仍按行数分配，与旧的按行匀速节奏一致。
+    """
+    frame_starts = ('$ORB', '$TRJ', '$MNT')
+    chunks = []
+    cur = []
+    for line in lines:
+        if line.startswith(frame_starts) and cur:
+            chunks.append(cur)
+            cur = []
+        cur.append(line)
+    if cur:
+        chunks.append(cur)
+    return chunks
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -36,9 +59,28 @@ def main():
     n = len(lines)
     if n < 2:
         sys.exit('file too small: %s' % args.file)
-    delay = max(0.001, args.seconds / n)
-    print('[player] %s: %d lines, %.1f ms/line, loop=%d'
-          % (args.file, n, delay * 1000, args.loop), flush=True)
+
+    # 按幕（$BEG 行）分段，各幕时间 = 总时长 × 行数占比；幕内按快照块均分
+    beg_idx = [i for i, l in enumerate(lines) if l.startswith('$BEG')]
+    segments = []
+    for s, start in enumerate(beg_idx):
+        end = beg_idx[s + 1] if s + 1 < len(beg_idx) else n
+        segments.append(lines[start:end])
+    head = lines[:beg_idx[0]] if beg_idx and beg_idx[0] > 0 else []
+
+    schedule = []   # (块行列表, 目标时长秒)
+    for seg in segments:
+        chunks = build_chunks(seg)
+        seg_share = len(seg) / n * args.seconds
+        per = max(0.001, seg_share / max(1, len(chunks)))
+        for c in chunks:
+            schedule.append((c, per))
+    if head:
+        schedule.insert(0, (head, 0.001))
+
+    total_chunks = len(schedule)
+    print('[player] %s: %d lines -> %d chunks, loop=%d'
+          % (args.file, n, total_chunks, args.loop), flush=True)
 
     srv = socket.socket()
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -53,22 +95,23 @@ def main():
     for lap in range(args.loop):
         t0 = time.time()
         sent = 0
-        for idx, line in enumerate(lines):
+        for idx, (chunk, per) in enumerate(schedule):
             try:
-                conn.sendall((line + '\n').encode('utf-8'))
+                conn.sendall(('\n'.join(chunk) + '\n').encode('utf-8'))
             except Exception as e:
                 print('[player] lap %d: send failed at %d/%d: %r'
-                      % (lap, idx, n, e), flush=True)
+                      % (lap, idx, total_chunks, e), flush=True)
                 return
-            sent += 1
+            sent += len(chunk)
             # 匀速节拍（扣除已耗时间，避免累计漂移）
-            target = t0 + delay * (idx + 1)
+            target = t0 + per * (idx + 1)
             pause = target - time.time()
             if pause > 0:
                 time.sleep(pause)
-            if idx % max(1, n // 10) == 0:
-                print('[player] lap %d %3d%% (%d/%d)'
-                      % (lap, 100 * idx // n, idx, n), flush=True)
+            if idx % max(1, total_chunks // 10) == 0:
+                print('[player] lap %d %3d%% (%d/%d chunks)'
+                      % (lap, 100 * idx // total_chunks, idx, total_chunks),
+                      flush=True)
         print('[player] lap %d done: %d lines in %.1fs'
               % (lap, sent, time.time() - t0), flush=True)
 

@@ -85,6 +85,12 @@ public:
         // 真实轨道相关（$ORB 报文）
         int health = 0;                 // 0 健康 / 1 不健康
         double meanMotionRevPerDay = 0.0;
+
+        // 逐星时间基准（帧锚点）：M0 与 tow 必须同帧到达才不会互相错位。
+        // $ORB 星：随 applyOrbitFrame 整体锚定；$DSP 星：随自己的 $DSP 帧
+        // 锚定——否则快照内 $ORB 先到会拿新 tow 配旧 M，位置来回跳（左右闪动）。
+        double frameSimT0 = -1.0;       // 收到该星当前帧时的仿真时刻（<0 未锚定）
+        double frameTow = 0.0;          // 该星当前帧的周内秒
     };
 
     explicit SatelliteModel(QObject *parent = nullptr);
