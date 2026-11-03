@@ -290,6 +290,10 @@ void RackStatusClient::processLine(const QByteArray &line) {
         if (m_pntModel) {
             m_pntModel->updateFromJam(lat, lon, radius, direction);
         }
+        if (m_satelliteModel) {
+            // 3D 地面干扰波纹与 2D 圈同源（半径 km 由 $JAM 驱动）
+            m_satelliteModel->updateJammerGroundPoint(lat, lon, radius);
+        }
     } else if (payload.startsWith("DUT,")) {
         // DUT 转台和待测设备姿态报文（12个参数）
         double ttRoll, ttRollSpeed, ttPitch, ttPitchSpeed, ttYaw, ttYawSpeed;

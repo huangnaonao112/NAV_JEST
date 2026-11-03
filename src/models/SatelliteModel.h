@@ -119,6 +119,8 @@ public:
     Q_INVOKABLE void addGroundPoint(double lat, double lon, QString name = "", int type = 0, double radius = 500.0, QColor color = QColor("red"), double errorRadius = 0.0);
     Q_INVOKABLE void updateGroundPoint(int index, double lat, double lon, QString name, int type, double radius, QColor color, double errorRadius);
     Q_INVOKABLE QVariantMap getGroundPoint(int index) const;
+    /// $JAM 报文驱动：更新地面干扰机标记（位置+波纹半径 km，与 2D 同源）
+    void updateJammerGroundPoint(double lat, double lon, double radiusKm);
     Q_INVOKABLE void removeGroundPoint(int index);
 
     Q_INVOKABLE int satelliteCount() const { return m_satellites.size(); }

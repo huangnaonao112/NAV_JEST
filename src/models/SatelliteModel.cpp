@@ -579,6 +579,29 @@ void SatelliteModel::syncSubpointsToPnt(double simTime)
     }
 }
 
+void SatelliteModel::updateJammerGroundPoint(double lat, double lon,
+                                             double radiusKm)
+{
+    // $JAM 报文 → 3D 地面干扰波纹。此前 3D 标记半径固定为启动时的
+    // 500 km 且从不更新（报文声明的半径只传给了 2D 地图），导致
+    // 3D 波纹比 2D 圈大 10 倍。现在半径/位置都由 $JAM 驱动，两视图同源。
+    for (int i = 0; i < m_groundPoints.size(); ++i) {
+        QVariantMap p = m_groundPoints[i].toMap();
+        if (p["type"].toInt() != JammerPoint)
+            continue;
+        p["position"] = OrbitalPhysics::llaToCartesian(
+            lat, lon, CoordinateSystem::GROUND_MARKER_ALTITUDE);
+        p["lat"] = lat;
+        p["lon"] = lon;
+        p["radius"] = radiusKm;
+        m_groundPoints[i] = p;
+        emit groundPointsChanged();
+        return;
+    }
+    // 无既有干扰点则新增
+    addGroundPoint(lat, lon, "", JammerPoint, radiusKm, QColor("#FF3333"));
+}
+
 void SatelliteModel::updateSimulation(double time)
 {
     // 暂停时跳过计算
