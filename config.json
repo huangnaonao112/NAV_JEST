@@ -13,5 +13,11 @@
     "rack_client": {
         "host": "127.0.0.1",
         "port": 8000
+    },
+    "local_account": {
+        "enabled": true,
+        "username": "admin",
+        "password_hash": "rsRW1iXQaFd33TCLBnvyZ44okDdgs4eh/bpfsdhaCsk=$FLpmnmGSBL94pHJFYTdePfcS2+jaxWtayI2TCqvHOE0=",
+        "comment": "本地应急账号(与数据库无关); 修改密码: 删除 password_hash 后填明文再由文档脚本重哈希"
     }
 }

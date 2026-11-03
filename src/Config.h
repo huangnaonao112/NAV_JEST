@@ -26,6 +26,11 @@ public:
     // Rack 客户端配置
     QString rackClientHost() const;
     int rackClientPort() const;
+
+    // 本地应急账号（与数据库无关；DB 掉线/迁移时的登录兜底）
+    bool localAccountEnabled() const;
+    QString localAccountUsername() const;
+    QString localAccountPasswordHash() const;
     
     // 配置文件路径
     QString configPath() const;

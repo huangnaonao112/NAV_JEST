@@ -1,6 +1,7 @@
 #include "HttpServer.h"
 
 #include "../infra/PasswordHasher.h"
+#include "../../Config.h"
 #include "utils/SceneLogger.h"
 #include <QDateTime>
 #include <QJsonArray>
@@ -150,6 +151,29 @@ void HttpServer::handleConnection() {
                     return;
                 }
 
+                // ===== 第一优先：本地应急账号（与数据库无关）=====
+                // 用途：改库/迁移/DB 掉线时不被锁在门外。
+                // 账号与哈希存 config.json（哈希格式与 DB 侧一致），
+                // enabled=false 或未配置时本分支关闭。
+                const Config &cfg = Config::instance();
+                if (cfg.localAccountEnabled()
+                    && !cfg.localAccountUsername().isEmpty()
+                    && !cfg.localAccountPasswordHash().isEmpty()
+                    && username.compare(cfg.localAccountUsername(),
+                                        Qt::CaseInsensitive) == 0
+                    && PasswordHasher::verify(password,
+                                              cfg.localAccountPasswordHash())) {
+                    SCENE_LOG_CAT("LOGIN", QString("user=%1 source=local (DB bypassed)").arg(username));
+                    QJsonObject okResp;
+                    okResp["ok"] = true;
+                    okResp["username"] = username;
+                    okResp["source"] = "local";
+                    sock->write(jsonResponse(200, okResp));
+                    sock->disconnectFromHost();
+                    return;
+                }
+
+                // ===== 第二优先：数据库账号 =====
                 const auto users = m_userRepo.list();
                 bool found = false;
                 QString storedPassword;
@@ -166,19 +190,26 @@ void HttpServer::handleConnection() {
                     .arg(storedPassword.length())
                     .arg(storedPassword.contains('$')));
 
-                if (!found || !PasswordHasher::verify(password, storedPassword)) {
-                    QJsonObject err;
-                    err["ok"] = false;
-                    err["message"] = "用户名或密码错误";
-                    sock->write(jsonResponse(401, err));
+                if (found && PasswordHasher::verify(password, storedPassword)) {
+                    QJsonObject okResp;
+                    okResp["ok"] = true;
+                    okResp["username"] = username;
+                    okResp["source"] = "db";
+                    sock->write(jsonResponse(200, okResp));
                     sock->disconnectFromHost();
                     return;
                 }
 
-                QJsonObject ok;
-                ok["ok"] = true;
-                ok["username"] = username;
-                sock->write(jsonResponse(200, ok));
+                // 失败原因区分：DB 完全没数据（多半是掉线/迁移）时提示本地账号兜底，
+                // 有数据但不匹配则仍是常规口令错误
+                QJsonObject err;
+                err["ok"] = false;
+                if (users.isEmpty()) {
+                    err["message"] = "用户名或密码错误（数据库无账号数据，可使用本地应急账号）";
+                } else {
+                    err["message"] = "用户名或密码错误";
+                }
+                sock->write(jsonResponse(401, err));
                 sock->disconnectFromHost();
                 return;
             }

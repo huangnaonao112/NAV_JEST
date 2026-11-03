@@ -72,6 +72,13 @@ build\cmake\Debug\NAV_JEST.exe
 
 ## 注意事项
 
+- **本地应急账号**（与数据库无关）：DB 掉线/迁移时仍可登录。账号存
+  `config.json` 的 `local_account` 节（用户名 + 密码哈希，enabled 开关），
+  登录时本地账号优先、DB 账号兜底，响应带 `source: local|db` 标注。
+  默认 `admin`（初始密码与部署密码一致，首次登录后请修改：删除
+  `password_hash` 填入新明文再运行
+  `python -c "import base64,hashlib,os,json;p='新密码';s=os.urandom(32);h=hashlib.sha256(s+p.encode()).digest();c=json.load(open('config.json',encoding='utf-8'));c['local_account']['password_hash']=base64.b64encode(s).decode()+'$'+base64.b64encode(h).decode();json.dump(c,open('config.json','w',encoding='utf-8'),indent=4)"`）。
+  注意 `enabled` 是 JSON 布尔值；本软件同时兼容布尔与字符串 "true"。
 - **坐标系与尺度**：场景里有两套空间（天体局部 1 单位 = 1 km；地月压缩
   1 单位 ≈ 4.805 km）。所有尺度常量集中在 `src/models/CoordinateSystem.h`，
   QML 侧经 `CoordinateSystem.xxx` 访问；**禁止在 QML/C++ 里手写 127.42 /

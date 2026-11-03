@@ -182,3 +182,30 @@ int Config::rackClientPort() const {
     }
     return intValue("rack_client.port", 8000);
 }
+
+bool Config::localAccountEnabled() const {
+    // 注意：enabled 在 config.json 里是 JSON 布尔值，value()->toString()
+    // 对布尔返回空串（曾致本地账号永远禁用），须按 Bool 读取
+    QStringList parts = QString("local_account.enabled").split('.');
+    QJsonObject current = m_config;
+    for (int i = 0; i < parts.size() - 1; ++i) {
+        if (!current.contains(parts[i])) return true;   // 默认启用
+        current = current[parts[i]].toObject();
+    }
+    const QString lastKey = parts.last();
+    if (current.contains(lastKey)) {
+        const QJsonValue v = current[lastKey];
+        if (v.isBool()) return v.toBool();
+        if (v.isString())
+            return v.toString().compare("true", Qt::CaseInsensitive) == 0;
+    }
+    return true;   // 未配置 = 默认启用
+}
+
+QString Config::localAccountUsername() const {
+    return value("local_account.username", "admin");
+}
+
+QString Config::localAccountPasswordHash() const {
+    return value("local_account.password_hash", "");
+}
