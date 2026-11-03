@@ -9,12 +9,24 @@ TCP 收发工具 - 服务端模式
 import os
 import sys
 
-# 设置 Tcl/Tk 环境变量（打包后需要）
+# 设置 Tcl/Tk 环境变量（打包后需要）。
+# 注意: PyInstaller 6 的数据目录是 _tcl_data/_tk_data（旧版为 tcl/tk），
+# 写死任何一种都会在另一种布局下 Tcl 初始化失败（init.tcl 找不到），
+# 因此按实际存在的目录自适应。
 if getattr(sys, 'frozen', False):
-    # 打包后的路径
     base_path = sys._MEIPASS
-    os.environ['TCL_LIBRARY'] = os.path.join(base_path, 'tcl', 'tcl8.6')
-    os.environ['TK_LIBRARY'] = os.path.join(base_path, 'tk', 'tk8.6')
+    exe_dir = os.path.dirname(sys.executable)
+    tcl_cands = [
+        os.path.join(base_path, '_tcl_data'),                       # PyInstaller 6
+        os.path.join(exe_dir, '_internal', '_tcl_data'),            # PyInstaller 6 onedir
+        os.path.join(base_path, 'tcl', 'tcl8.6'),                   # PyInstaller ≤5
+        os.path.join(exe_dir, 'tcl', 'tcl8.6'),
+    ]
+    for cand in tcl_cands:
+        if os.path.isfile(os.path.join(cand, 'init.tcl')):
+            os.environ['TCL_LIBRARY'] = cand
+            os.environ['TK_LIBRARY'] = cand.replace('_tcl_data', '_tk_data')                                            .replace('tcl8.6', 'tk8.6')
+            break
 
 import tkinter as tk
 from tkinter import ttk, scrolledtext
