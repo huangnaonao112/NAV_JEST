@@ -4,6 +4,9 @@
 #include <QtQml/qqml.h>
 #include <QVector3D>
 #include <QVector>
+#include <QtMath>
+#include <cmath>
+#include <algorithm>
 
 /**
  * @brief 场景坐标与尺度的唯一事实来源（Single Source of Truth）
@@ -215,6 +218,37 @@ public:
     static QVector3D ecefStdFromScene(const QVector3D &scene)
     {
         return QVector3D(scene.z(), scene.x(), scene.y());
+    }
+
+    // ================= 场景球面坐标（唯一实现，OrbitalPhysics 转发）=====
+    // 球体（WGS-84 简化）经纬度 -> 场景坐标，适配 Qt #Sphere 贴图：
+    //   x = r·cos(lat)·sin(lon), y = r·sin(lat), z = r·cos(lat)·cos(lon)
+    // radius 单位 km，返回 km（空间 1：1 场景单位 = 1 km）。
+    // 常用半径：GROUND_MARKER_ALTITUDE(6391) / MOON_TRAIL_RADIUS(1740)。
+    static QVector3D llaToScene(double lat, double lon, double radiusKm)
+    {
+        const double latRad = qDegreesToRadians(lat);
+        const double lonRad = qDegreesToRadians(lon);
+        return QVector3D(
+            static_cast<float>(radiusKm * std::cos(latRad) * std::sin(lonRad)),
+            static_cast<float>(radiusKm * std::sin(latRad)),
+            static_cast<float>(radiusKm * std::cos(latRad) * std::cos(lonRad)));
+    }
+
+    /** @brief llaToScene 的逆变换（球面近似，见 OrbitalPhysics::cartesianToLla） */
+    static void sceneToLla(const QVector3D &pos, double &lat, double &lon)
+    {
+        const double radius = pos.length();
+        if (radius < 1e-6)
+        {
+            lat = 0.0;
+            lon = 0.0;
+            return;
+        }
+        lat = qRadiansToDegrees(std::asin(
+            std::max(-1.0, std::min(1.0, static_cast<double>(pos.y()) / radius))));
+        lon = qRadiansToDegrees(std::atan2(
+            static_cast<double>(pos.x()), static_cast<double>(pos.z())));
     }
 
     /**

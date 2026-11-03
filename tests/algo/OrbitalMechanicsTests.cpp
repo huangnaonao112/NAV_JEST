@@ -219,6 +219,62 @@ int main()
     expectTrue("along-track impulse changes eccentricity",
                maneuverOrbitValid && maneuverElements.eccentricity > 1.0e-6);
 
+    // ===== 跨语言金标：与 scripts/orb_common.py::sub_ecef 逐位对照 =====
+    // 锁定"生成器 ↔ C++ 渲染"坐标约定（惯性推进 + 绕 Z 转 -Ωe·tow）。
+    // 金标值由 orb_common.sub_ecef 生成（三幕演示两颗欺骗源、三个快照 tow）。
+    // 修改任一侧坐标约定前，先读 docs/轨道参数报文接口.md §10.1。
+    struct GoldenCase
+    {
+        const char *name;
+        double aKm;
+        double ecc;
+        double incDeg;
+        double raanDeg;
+        double argpDeg;
+        double m0Deg;
+        double tow;
+        double xKm;
+        double yKm;
+        double zKm;
+    };
+    const GoldenCase goldenCases[] = {
+        { "DSP1@tow0", 27906.051, 0.0008347, 54.6016, 140.0414, 38.6571, 353.2896, 0.0,
+          -23624.583745960, 8648.284714576, 12022.616659326 },
+        { "DSP1@tow4500", 27906.051, 0.0008347, 54.6016, 140.0414, 38.6571, 353.2896, 4500.0,
+          -18376.037007141, 1643.907422458, 20909.843023327 },
+        { "DSP1@tow9000", 27906.051, 0.0008347, 54.6016, 140.0414, 38.6571, 353.2896, 9000.0,
+          -14206.227480536, -9008.928723469, 22252.714850527 },
+        { "DSP2@tow0", 42171.804, 0.003982, 54.2839, 324.4706, -162.9201, 292.7637, 0.0,
+          -10726.306503813, 30992.022690392, 26409.728860728 },
+        { "DSP2@tow4500", 42171.804, 0.003982, 54.2839, 324.4706, -162.9201, 292.7637, 4500.0,
+          -10383.658529589, 36595.375785004, 17946.224440871 },
+        { "DSP2@tow9000", 42171.804, 0.003982, 54.2839, 324.4706, -162.9201, 292.7637, 9000.0,
+          -6694.190846555, 40795.939176520, 7554.167944749 },
+    };
+
+    for (const GoldenCase &gc : goldenCases)
+    {
+        OrbitalElements el;
+        el.semiMajorAxisKm = gc.aKm;
+        el.eccentricity = gc.ecc;
+        el.inclinationDeg = gc.incDeg;
+        el.raanDeg = gc.raanDeg;
+        el.argumentOfPerigeeDeg = gc.argpDeg;
+        el.trueAnomalyDeg = meanToTrueAnomalyDeg(gc.m0Deg, gc.ecc);
+
+        // 与 orb_common.sub_ecef 同构：M0 + n·tow 惯性推进 + 绕 Z 转 -Ωe·tow
+        const StateVector sv = propagateKepler(el, gc.tow);
+        const double spinRad = -EarthRotationRateRadPerSecond * gc.tow;
+        const Vector3 ecef = rotateZ(sv.positionKm, spinRad);
+
+        expectNear((std::string(gc.name) + " x").c_str(),
+                   ecef.x, gc.xKm, 1.0e-6);
+        expectNear((std::string(gc.name) + " y").c_str(),
+                   ecef.y, gc.yKm, 1.0e-6);
+        expectNear((std::string(gc.name) + " z").c_str(),
+                   ecef.z, gc.zKm, 1.0e-6);
+    }
+
     if (failures > 0)
     {
         std::cerr << failures << " test(s) failed.\n";

@@ -23,6 +23,7 @@ private slots:
     void thicknessConstantsAreInPlausibleRange();
     void thicknessSanityGuardRejectsKnownBadValues();
     void displaySpaceRoundTrip();
+    void llaSceneRoundTrip();
     void cameraDistancesAreSane();
     void sceneAxisConventionMatchesEarthTexture();
 };
@@ -142,6 +143,43 @@ void CoordinateSystemTests::sceneAxisConventionMatchesEarthTexture()
                  qPrintable(QStringLiteral("lat=%1 lon=%2 dot=%3")
                             .arg(lat).arg(lon)
                             .arg(QVector3D::dotProduct(a, b))));
+    }
+}
+
+void CoordinateSystemTests::llaSceneRoundTrip()
+{
+    // llaToScene（唯一实现，CoordinateSystem）/ sceneToLla 往返必须闭合；
+    // OrbitalPhysics::llaToCartesian/cartesianToLla 已改为纯转发。
+    using CS = CoordinateSystem;
+    const double cases[][3] = {
+        {0.0, 0.0, 6371.0}, {39.9, 116.4, 6391.0}, {-45.0, 120.0, 1740.0},
+        {80.0, -30.0, 26560.0}, {-60.0, 170.0, 42164.0},
+    };
+    for (const auto &c : cases) {
+        const double lat = c[0], lon = c[1], r = c[2];
+        const QVector3D scene = CS::llaToScene(lat, lon, r);
+        double latBack = 0.0, lonBack = 0.0;
+        CS::sceneToLla(scene, latBack, lonBack);
+        QVERIFY2(std::abs(latBack - lat) < 1e-4,
+                 qPrintable(QStringLiteral("lat roundtrip: %1 -> %2")
+                            .arg(lat).arg(latBack)));
+        QVERIFY2(std::abs(lonBack - lon) < 1e-4,
+                 qPrintable(QStringLiteral("lon roundtrip: %1 -> %2")
+                            .arg(lon).arg(lonBack)));
+        QVERIFY2(std::abs(double(scene.length()) - r) < 0.02,  // QVector3D 为 float，42164km 处量化 ~5e-3
+                 qPrintable(QStringLiteral("radius: %1 -> %2")
+                            .arg(r).arg(double(scene.length()))));
+
+        // 与钉死的场景轴约定（sceneFromEcefStd ∘ 球面 ECEF）同向
+        const double la = qDegreesToRadians(lat), lo = qDegreesToRadians(lon);
+        const QVector3D ecefStd(float(r * std::cos(la) * std::cos(lo)),
+                                float(r * std::cos(la) * std::sin(lo)),
+                                float(r * std::sin(la)));
+        const QVector3D mapped = CS::sceneFromEcefStd(ecefStd);
+        QVERIFY2(QVector3D::dotProduct(scene.normalized(), mapped.normalized())
+                     > 0.99999,
+                 qPrintable(QStringLiteral("axis mismatch lat=%1 lon=%2")
+                            .arg(lat).arg(lon)));
     }
 }
 

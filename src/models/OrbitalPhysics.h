@@ -4,6 +4,7 @@
 #include <QtMath>
 
 #include "CoordinateSystem.h"
+#include "OrbitalMechanics.h"
 
 struct OrbitalElements {
     double semiMajorAxis;    // a (轨道半长轴)
@@ -26,15 +27,10 @@ public:
         double longitude;
     };
 
-    // 求解开普勒方程: M = E - e * sin(E)
+    // 求解开普勒方程: M = E - e * sin(E)。
+    // 唯一实现见 navcore OrbitalMath::solveEccentricAnomaly（本类只做转发）
     static double solveKepler(double M_rad, double e) {
-        double E = M_rad; 
-        for (int i = 0; i < 10; ++i) {
-            double delta = (E - e * sin(E) - M_rad) / (1.0 - e * cos(E));
-            E -= delta;
-            if (qAbs(delta) < 1e-10) break;
-        }
-        return E;
+        return OrbitMath::solveEccentricAnomaly(M_rad, e);
     }
 
     // 根据六根数计算 ECI 坐标
@@ -116,33 +112,14 @@ public:
     // - 详见 docs/坐标系与尺度规范.md
     static QVector3D llaToCartesian(double lat, double lon,
                                     double radius = CoordinateSystem::EARTH_RADIUS) {
-        double latRad = qDegreesToRadians(lat);
-        double lonRad = qDegreesToRadians(lon);
-
-        // Qt Sphere 贴图对齐公式:
-        // x = r * cos(lat) * sin(lon)
-        // y = r * sin(lat)
-        // z = r * cos(lat) * cos(lon)
-        float x = radius * cos(latRad) * sin(lonRad);
-        float y = radius * sin(latRad);
-        float z = radius * cos(latRad) * cos(lonRad);
-
-        return QVector3D(x, y, z);
+        // 公式唯一实现见 CoordinateSystem::llaToScene（本类只做转发，
+        // 防止"场景球面公式"出现第二份拷贝各自演化）
+        return CoordinateSystem::llaToScene(lat, lon, radius);
     }
 
     // 将三维空间坐标转换回经纬度 (适配 Qt Quick 3D #Sphere 贴图映射)
     static void cartesianToLla(const QVector3D& pos, double& lat, double& lon) {
-        double radius = pos.length();
-        if (radius < 1e-6) {
-            lat = 0; lon = 0;
-            return;
-        }
-
-        // lat = asin(y / r)
-        lat = qRadiansToDegrees(asin(qBound(-1.0, (double)pos.y() / radius, 1.0)));
-
-        // lon = atan2(x, z)
-        lon = qRadiansToDegrees(atan2((double)pos.x(), (double)pos.z()));
+        CoordinateSystem::sceneToLla(pos, lat, lon);
     }
 
     // 重载版本：返回 LLA 结构体，方便链式调用
@@ -152,16 +129,6 @@ public:
         return lla;
     }
 
-    // 获取月球在特定时间的坐标 (基于真实比例)
-    // 真实地月距离: 384400 km，按 1:100 缩放为 3844
-    static QVector3D getMoonPosition(double timeInSeconds) {
-        // QML 中 moonPivot 的动画是 1000000ms (1000s) 转一圈
-        double angle = (timeInSeconds / 1000.0) * 2.0 * M_PI;
-        float x = 3844.0 * cos(angle);
-        float z = -3844.0 * sin(angle); // 顺时针旋转匹配 QML
-        return QVector3D(x, 0, z);
-    }
-    
     // ============================================================
     // 月球坐标转换函数
     // ============================================================

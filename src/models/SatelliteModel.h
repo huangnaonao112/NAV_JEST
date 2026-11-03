@@ -7,6 +7,7 @@
 #include <QVariantList>
 #include "OrbitalPhysics.h"
 #include "OrbitMessage.h"
+#include "DayRateEstimator.h"
 
 class PntDataModel;  // 前向声明
 
@@ -163,12 +164,7 @@ private:
     int m_frameWeek = 0;                 // 轨道根数参考历元（GPS 周）
     double m_frameSecondsOfWeek = 0.0;   // 轨道根数参考历元（周内秒）
     double m_frameSimT0 = 0.0;           // 收到该帧时的仿真时刻
-    double m_dayRate = 1.0;              // 报文日时间/真实时间（回放快进倍率，
-                                         //  由相邻两帧的 tow 差与到达间隔推算，
-                                         //  经 EMA 平滑防 TCP 突发抖动）
-    double m_rateEma = 1.0;              // dayRate 的滑动平均
-    bool m_rateEmaInit = false;          // EMA 是否已初始化
-    double m_lastDayDelta = 300.0;       // 上一帧间隔的日时间（外推上限用）
+    navcore::DayRateEstimator m_rate;    // 回放倍率估计（EMA 平滑 + 抗合包突发）
     double m_lastSubpointSync = -1.0;    // 2D 星下点上次同步的仿真时刻
     int m_visibilityEpoch = 0;           // health 翻转计数（QML 绑定重估触发器）
     int m_orbCount = 0;                  // $ORB 星座的卫星数（欺骗星不计入，追加其后）

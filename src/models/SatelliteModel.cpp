@@ -206,20 +206,14 @@ void SatelliteModel::setInertialView(bool on)
 
 void SatelliteModel::updateDayRate(const OrbitMessage::Frame &frame)
 {
-    // 由相邻两帧推算"报文日时间/真实时间"倍率：
-    // 回放一天(86400 s)用 120 s 时 dayRate≈720，渲染按该倍率快进，
-    // 卫星在帧间沿开普勒弧连续移动，而不是每帧跳一步。
-    //
-    // TCP 会把匀速发送的帧合包（到达间隔剧烈抖动），直接用瞬时到达间隔
-    // 会让倍率乱跳、外推位置过冲（GEO 曾偏 39°）。因此：
-    //   1) 瞬时倍率经 EMA 平滑；
-    //   2) EMA 结果限幅在上一次的 [1/4, 4] 倍，抑制突发；
-    //   3) 渲染外推量按"不超过约两帧的日时间"钳制（updateSimulation）。
+    // 由相邻两帧推算"报文日时间/真实时间"倍率（回放一天 86400 s 用 120 s
+    // 播完时 ≈720）：渲染按该倍率在帧间沿开普勒弧连续外推，而不是每帧跳步。
+    // 倍率学习/平滑/抗合包突发的策略见 navcore::DayRateEstimator 与
+    // docs/轨道参数报文接口.md §10.5；本函数只负责周绕回归一与复位时机。
     const double prevTow = m_frameSecondsOfWeek;
     const double prevArrival = m_frameSimT0;
     if (!m_realOrbitMode) {
-        m_dayRate = 1.0;    // 首帧无历史，先按实时，第二帧起校准
-        m_rateEmaInit = false;
+        m_rate.reset();     // 首帧无历史，先按实时，第二帧起校准
         return;
     }
     double dayDelta = frame.secondsOfWeek - prevTow;
@@ -228,24 +222,8 @@ void SatelliteModel::updateDayRate(const OrbitMessage::Frame &frame)
     else if (dayDelta > 302400.0)
         dayDelta -= 604800.0;
     const double wallDelta = m_elapsedTime - prevArrival;
-    // 合包突发防护：若干行报文被 TCP 拼成一包时，帧到达间隔可缩到毫秒级，
-    // 瞬时倍率会虚高几十倍并把 EMA 带偏（外推过冲→下一帧回跳→左右闪动）。
-    //   1) 间隔 <50ms 的帧只采纳数据、不参与倍率学习（沿用上一倍率）；
-    //   2) 单样本瞬时倍率限幅在当前倍率的 [1/4, 4] 倍，防单帧带偏。
-    if (wallDelta >= 0.05 && dayDelta > 0.0 && dayDelta <= 7200.0) {
-        double instant = dayDelta / wallDelta;
-        if (m_rateEmaInit)
-            instant = qBound(m_dayRate * 0.25, instant, m_dayRate * 4.0);
-        if (!m_rateEmaInit) {
-            m_rateEma = instant;
-            m_rateEmaInit = true;
-        } else {
-            m_rateEma = 0.75 * m_rateEma + 0.25 * instant;
-        }
-        m_dayRate = qBound(m_rateEma * 0.25, m_rateEma, m_rateEma * 4.0);
-        m_lastDayDelta = dayDelta;
-    }
-    // 其余情况（暂停后恢复/乱序/倒放）保持上一次的倍率
+    m_rate.update(dayDelta, wallDelta);
+    // 其余情况（合包突发/乱序/倒放）由估计器静默忽略，沿用上一次倍率
 }
 
 void SatelliteModel::applyOrbitFrame(const OrbitMessage::Frame &frame)
@@ -572,7 +550,7 @@ void SatelliteModel::updateSimulation(double time)
         // 每颗星用自己的帧锚点（M0 与 tow 同帧到达的那一帧）外推：
         // 全局基准只对 $ORB 星成立，$DSP 星的 M 与全局 tow 相差一个
         // 快照内错位，会造成位置来回跳。
-        const double maxElapsed = m_lastDayDelta * 2.0;
+        const double maxElapsed = m_rate.lastDayDelta() * 2.0;
         for (SatelliteData &sat : m_satellites) {
             // 欺骗星可见性由 $DSP active 控制；定位星由 health 控制
             sat.visible = sat.isDeception ? sat.signalActive
@@ -582,7 +560,7 @@ void SatelliteModel::updateSimulation(double time)
                                                     : m_frameSimT0;
             const double tow0 = sat.frameSimT0 >= 0.0 ? sat.frameTow
                                                       : m_frameSecondsOfWeek;
-            double elapsed = (m_elapsedTime - t0) * m_dayRate;
+            double elapsed = (m_elapsedTime - t0) * m_rate.dayRate();
             if (elapsed > maxElapsed)
                 elapsed = maxElapsed;
             else if (elapsed < -maxElapsed)

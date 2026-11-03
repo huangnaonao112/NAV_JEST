@@ -186,6 +186,7 @@ find_package(Qt6 REQUIRED COMPONENTS Test)
 
 add_library(navcore STATIC
     src/algo/OrbitalMechanics.h       src/algo/OrbitalMechanics.cpp
+    src/algo/DayRateEstimator.h       src/algo/DayRateEstimator.cpp
     src/algo/GnssSignalSimulation.h   src/algo/GnssSignalSimulation.cpp
     src/algo/VirtualReceiver.h        src/algo/VirtualReceiver.cpp
     src/algo/TrajectoryEngine.h       src/algo/TrajectoryEngine.cpp
@@ -195,13 +196,14 @@ target_compile_features(navcore PUBLIC cxx_std_17)
 
 enable_testing()
 add_executable(navcore_orbit_tests     tests/algo/OrbitalMechanicsTests.cpp)
+add_executable(navcore_dayrate_tests   tests/algo/DayRateEstimatorTests.cpp)
 add_executable(navcore_signal_tests    tests/algo/GnssSignalSimulationTests.cpp)
 add_executable(navcore_receiver_tests  tests/algo/VirtualReceiverTests.cpp)
 add_executable(navcore_trajectory_tests tests/algo/TrajectoryEngineTests.cpp)
 add_executable(navcore_noise_tests     tests/algo/MeasurementNoiseTests.cpp)
 add_executable(navcore_pipeline_tests  tests/algo/BroadcastPipelineTests.cpp)
 target_link_libraries(navcore_pipeline_tests PRIVATE Qt6::Test)
-foreach(navcore_test navcore_orbit_tests navcore_signal_tests navcore_receiver_tests navcore_trajectory_tests navcore_noise_tests navcore_pipeline_tests)
+foreach(navcore_test navcore_orbit_tests navcore_dayrate_tests navcore_signal_tests navcore_receiver_tests navcore_trajectory_tests navcore_noise_tests navcore_pipeline_tests)
     target_link_libraries(${navcore_test} PRIVATE navcore)
     add_test(NAME ${navcore_test} COMMAND ${navcore_test})
     # Qt 测试目标需要 Qt bin 在 PATH（星历测试用 QtTest 读取样本文件）
