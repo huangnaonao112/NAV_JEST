@@ -526,6 +526,12 @@ void SatelliteModel::applyDeceptionFrame(
         }
     }
 
+    // 关键：波束(DeceptionSignalItem)绑定 model.visible/signalActive，
+    // 必须发 dataChanged 携带对应 role，否则模型数据改了 QML 也不刷新
+    // （曾致干扰波束永远不出现）
+    emit dataChanged(createIndex(0, 0),
+                     createIndex(qMax(0, m_satellites.size() - 1), 0),
+                     {PositionRole, VisibleRole, SignalActiveRole, ColorRole});
     if (visibilityChanged) {
         ++m_visibilityEpoch;
         emit satellitesVisibilityChanged();
@@ -534,7 +540,6 @@ void SatelliteModel::applyDeceptionFrame(
         invalidateOrbitCache();
         emit orbitPathsChanged();
     }
-    // 可见性/位置变化经 updateSimulation 的 dataChanged 传导（真实模式每帧刷新）
     if (m_realOrbitMode)
         updateSimulation(m_elapsedTime);
 }
