@@ -136,7 +136,7 @@ bool parseDeceptionFrame(const QByteArray &payload, QVector<DeceptionEntry> &out
 {
     out.clear();
     const QList<QByteArray> parts = payload.split(',');
-    // DSP,time,count + 5*count
+    // DSP,time,count + 8*count
     if (parts.size() < 3) {
         error = QStringLiteral("DSP frame requires at least 3 fields, got %1").arg(parts.size());
         return false;
@@ -147,11 +147,11 @@ bool parseDeceptionFrame(const QByteArray &payload, QVector<DeceptionEntry> &out
     }
 
     int count = 0;
-    if (!parseInt(parts[2], count) || count < 0 || count > 32) {
+    if (!parseInt(parts[2], count) || count < 0 || count > 16) {
         error = QStringLiteral("bad deception count");
         return false;
     }
-    const int expected = 3 + count * 5;
+    const int expected = 3 + count * 8;
     if (parts.size() < expected) {
         error = QStringLiteral("DSP frame requires %1 fields, got %2")
                     .arg(expected).arg(parts.size());
@@ -159,30 +159,41 @@ bool parseDeceptionFrame(const QByteArray &payload, QVector<DeceptionEntry> &out
     }
 
     for (int i = 0; i < count; ++i) {
-        const int base = 3 + i * 5;
+        const int base = 3 + i * 8;
         DeceptionEntry e;
         if (!parseInt(parts[base + 0], e.index) || e.index <= 0 || e.index > 16) {
             error = QStringLiteral("bad index at entry %1").arg(i + 1);
             return false;
         }
-        if (!parseDouble(parts[base + 1], e.latDeg) || e.latDeg < -90.0 || e.latDeg > 90.0) {
-            error = QStringLiteral("bad latitude at entry %1").arg(i + 1);
+        if (!parseDouble(parts[base + 1], e.aKm) || e.aKm < 100.0 || e.aKm > 60000.0) {
+            error = QStringLiteral("bad semi-major axis at entry %1").arg(i + 1);
             return false;
         }
-        if (!parseDouble(parts[base + 2], e.lonDeg) || e.lonDeg < -180.0 || e.lonDeg > 180.0) {
-            error = QStringLiteral("bad longitude at entry %1").arg(i + 1);
+        if (!parseDouble(parts[base + 2], e.e) || e.e < 0.0 || e.e >= 0.9) {
+            error = QStringLiteral("bad eccentricity at entry %1").arg(i + 1);
             return false;
         }
-        if (!parseDouble(parts[base + 3], e.altKm) || e.altKm < 100.0 || e.altKm > 60000.0) {
-            error = QStringLiteral("bad altitude at entry %1").arg(i + 1);
+        if (!parseDouble(parts[base + 3], e.iDeg) || e.iDeg < 0.0 || e.iDeg > 180.0) {
+            error = QStringLiteral("bad inclination at entry %1").arg(i + 1);
             return false;
         }
-        if (!parseInt(parts[base + 4], reinterpret_cast<int &>(e.active)) &&
-            parts[base + 4].trimmed() != "0" && parts[base + 4].trimmed() != "1") {
+        if (!parseDouble(parts[base + 4], e.raanDeg)) {
+            error = QStringLiteral("bad RAAN at entry %1").arg(i + 1);
+            return false;
+        }
+        if (!parseDouble(parts[base + 5], e.argpDeg)) {
+            error = QStringLiteral("bad argument of perigee at entry %1").arg(i + 1);
+            return false;
+        }
+        if (!parseDouble(parts[base + 6], e.M0Deg)) {
+            error = QStringLiteral("bad mean anomaly at entry %1").arg(i + 1);
+            return false;
+        }
+        if (parts[base + 7].trimmed() != "0" && parts[base + 7].trimmed() != "1") {
             error = QStringLiteral("bad active flag at entry %1").arg(i + 1);
             return false;
         }
-        e.active = parts[base + 4].trimmed() == "1";
+        e.active = parts[base + 7].trimmed() == "1";
         out.append(e);
     }
     return true;

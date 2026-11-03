@@ -447,47 +447,71 @@ int SatelliteModel::deceptionCount() const
 void SatelliteModel::applyDeceptionFrame(
     const QVector<OrbitMessage::DeceptionEntry> &entries)
 {
-    // $DSP 语义：全量声明当前激活的欺骗干扰源。
-    // 现有 $DSP 卫星中不在本帧里的 → 移除（干扰演示结束）。
-    bool changed = false;
+    // $DSP 语义：全量声明当前激活的欺骗干扰源（携带开普勒根数）。
+    // 欺骗星与 $ORB 星座独立（追加其后），帧间沿自身轨道连续运动，
+    // 干扰波束随卫星移动。帧中未出现的欺骗源自动移除。
+    bool structural = false;    // 增/删（需重建轨道环）
+    bool visibilityChanged = false;
 
-    // 更新/新增
     for (const OrbitMessage::DeceptionEntry &e : entries) {
         const QString name = QStringLiteral("DSP-%1").arg(e.index);
         SatelliteData *existing = nullptr;
         for (SatelliteData &s : m_satellites) {
             if (s.isDeception && s.name == name) { existing = &s; break; }
         }
-        const QColor color = QColor("#FF3333");
         if (!existing) {
             SatelliteData sat;
             sat.isDeception = true;
             sat.name = name;
-            sat.color = color;
-            sat.elements.color = color;
-            sat.elements.semiMajorAxis = e.altKm;
-            sat.elements.eccentricity = 0.0;
-            sat.elements.inclination = 0.0;
-            sat.elements.raan = e.lonDeg;       // 复用字段供轨道环生成
-
+            sat.health = 0;
+            sat.color = QColor("#FF3333");
+            sat.elements.color = sat.color;
             beginInsertRows(QModelIndex(), m_satellites.size(), m_satellites.size());
             m_satellites.append(sat);
             endInsertRows();
             existing = &m_satellites.last();
-            changed = true;
+            structural = true;
         }
-        // 位置与状态（场景轴约定: llaToCartesian 直接给场景坐标）
-        existing->position = OrbitalPhysics::llaToCartesian(
-            e.latDeg, e.lonDeg, e.altKm);
-        existing->latitude = e.latDeg;
-        existing->longitude = e.lonDeg;
-        existing->signalActive = e.active;
-        existing->visible = e.active;       // 波束开 = 卫星显示
+        // 轨道根数（与 $ORB 同语义：M0+n·tow 即 ECEF）
+        existing->elements.semiMajorAxis = e.aKm;
+        existing->elements.eccentricity = e.e;
+        existing->elements.inclination = e.iDeg;
+        existing->elements.raan = e.raanDeg;
+        existing->elements.argPerigee = e.argpDeg;
+        existing->elements.meanAnomaly =
+            OrbitMath::meanToTrueAnomalyDeg(e.M0Deg, e.e);
         existing->visualScale = 1.2;
-        changed = true;
+
+        // 帧时刻初始位置（二体 ν(M0) 处，标准 ECEF → 场景轴序）
+        try {
+            OrbitMath::OrbitalElements el;
+            el.semiMajorAxisKm = existing->elements.semiMajorAxis;
+            el.eccentricity = existing->elements.eccentricity;
+            el.inclinationDeg = existing->elements.inclination;
+            el.raanDeg = existing->elements.raan;
+            el.argumentOfPerigeeDeg = existing->elements.argPerigee;
+            el.trueAnomalyDeg = existing->elements.meanAnomaly;   // 已是 ν
+            const OrbitMath::StateVector sv = OrbitMath::propagateKepler(el, 0.0);
+            existing->position = CoordinateSystem::sceneFromEcefStd(
+                QVector3D(float(sv.positionKm.x), float(sv.positionKm.y),
+                          float(sv.positionKm.z)));
+            const OrbitMath::GeodeticPosition geo =
+                OrbitMath::ecefToGeodetic(sv.positionKm);
+            existing->latitude = geo.latitudeDeg;
+            existing->longitude = geo.longitudeDeg;
+        } catch (const std::exception &) {
+            // 保持上一帧位置
+        }
+
+        // 可见性/波束：active=1 时显示并开启干扰
+        const bool vis = e.active;
+        if (existing->visible != vis || existing->signalActive != e.active)
+            visibilityChanged = true;
+        existing->visible = vis;
+        existing->signalActive = e.active;
     }
 
-    // 移除不在本帧中的
+    // 移除不在本帧中的欺骗源
     for (int i = m_satellites.size() - 1; i >= 0; --i) {
         const SatelliteData &s = m_satellites[i];
         if (!s.isDeception) continue;
@@ -498,19 +522,21 @@ void SatelliteModel::applyDeceptionFrame(
             beginRemoveRows(QModelIndex(), i, i);
             m_satellites.removeAt(i);
             endRemoveRows();
-            changed = true;
+            structural = true;
         }
     }
 
-    if (changed) {
-        invalidateOrbitCache();
-        emit orbitPathsChanged();
-        emit dataChanged(createIndex(0, 0),
-                         createIndex(qMax(0, m_satellites.size() - 1), 0),
-                         {PositionRole, VisibleRole, ColorRole});
+    if (visibilityChanged) {
         ++m_visibilityEpoch;
         emit satellitesVisibilityChanged();
     }
+    if (structural) {
+        invalidateOrbitCache();
+        emit orbitPathsChanged();
+    }
+    // 可见性/位置变化经 updateSimulation 的 dataChanged 传导（真实模式每帧刷新）
+    if (m_realOrbitMode)
+        updateSimulation(m_elapsedTime);
 }
 
 void SatelliteModel::syncSubpointsToPnt(double simTime)
@@ -529,8 +555,8 @@ void SatelliteModel::syncSubpointsToPnt(double simTime)
     lats.reserve(m_satellites.size());
     lons.reserve(m_satellites.size());
     for (const SatelliteData &sat : m_satellites) {
-        if (!sat.visible)
-            continue;   // 只同步参与定位的卫星（与 3D 显示一致）
+        if (!sat.visible || sat.isDeception)
+            continue;   // 只同步参与定位的卫星（欺骗干扰源不上 2D 星下点）
         prns.append(sat.name);
         lats.append(sat.latitude);
         lons.append(sat.longitude);
@@ -574,8 +600,9 @@ void SatelliteModel::updateSimulation(double time)
         // 不能再做 GMST 旋转(重复扣地球自转, 曾致星下点错位 196°)。
         // 卫星始终出现在接收站半球, 与 2D 星下点一一对应。
         for (SatelliteData &sat : m_satellites) {
-            if (sat.isDeception) continue;   // 欺骗星由 $DSP 管理位置/可见性
-            sat.visible = (sat.health == 0);   // 只显示参与定位的卫星
+            // 欺骗星可见性由 $DSP active 控制；定位星由 health 控制
+            sat.visible = sat.isDeception ? sat.signalActive
+                                          : (sat.health == 0);
             OrbitMath::OrbitalElements el;
             el.semiMajorAxisKm = sat.elements.semiMajorAxis;
             el.eccentricity = sat.elements.eccentricity;
@@ -584,7 +611,7 @@ void SatelliteModel::updateSimulation(double time)
             el.argumentOfPerigeeDeg = sat.elements.argPerigee;
             el.trueAnomalyDeg = sat.elements.meanAnomaly;   // 见 applyOrbitFrame 的 M0→ν 转换
             try {
-                if (sat.isDeception) continue;
+                // 欺骗星同样沿开普勒轨道推进——干扰波束随卫星移动
                 const OrbitMath::StateVector sv = OrbitMath::propagateKepler(el, elapsed);
                 // GPS 广播约定：帧根数的 Ω0 已对齐"周起始"，广播算法烧进
                 // -Ωe×tow(周内秒) —— 实测 tow=0 帧位置即真值、 tow>0 帧多转

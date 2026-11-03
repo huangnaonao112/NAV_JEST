@@ -119,34 +119,39 @@ void OrbitMessageTests::parsesDeceptionFrame()
 {
     const QByteArray payload =
         "DSP,120000.000,2,"
-        "1,39.9,116.4,26560.0,1,"
-        "2,30.0,100.0,20000.0,0";
+        "1,26560.0,0.001,55.0,120.0,10.0,45.0,1,"
+        "2,38900.0,0.002,3.0,60.0,180.0,120.0,0";
     QVector<OrbitMessage::DeceptionEntry> entries;
     QString error;
     QVERIFY2(OrbitMessage::parseDeceptionFrame(payload, entries, error), qPrintable(error));
     QCOMPARE(entries.size(), 2);
     QCOMPARE(entries[0].index, 1);
-    QCOMPARE(entries[0].latDeg, 39.9);
-    QCOMPARE(entries[0].lonDeg, 116.4);
-    QCOMPARE(entries[0].altKm, 26560.0);
+    QCOMPARE(entries[0].aKm, 26560.0);
+    QCOMPARE(entries[0].e, 0.001);
+    QCOMPARE(entries[0].iDeg, 55.0);
+    QCOMPARE(entries[0].raanDeg, 120.0);
+    QCOMPARE(entries[0].argpDeg, 10.0);
+    QCOMPARE(entries[0].M0Deg, 45.0);
     QVERIFY(entries[0].active);
     QVERIFY(!entries[1].active);
 }
 
 void OrbitMessageTests::rejectsBadDeceptionFrame()
 {
-    OrbitMessage::Frame frame;
+    QVector<OrbitMessage::DeceptionEntry> entries;
     QString error;
     // 数量与字段数不匹配
-    QVector<OrbitMessage::DeceptionEntry> entries;
     QVERIFY(!OrbitMessage::parseDeceptionFrame(
-        "DSP,120000.000,2,1,39.9,116.4,26560.0,1", entries, error));
-    // 超范围高度（单位错）
+        "DSP,120000.000,2,1,26560.0,0.001,55.0,120.0,10.0,45.0,1", entries, error));
+    // 超范围半长轴（单位错：m 当 km）
     QVERIFY(!OrbitMessage::parseDeceptionFrame(
-        "DSP,120000.000,1,1,G,39.9,116.4,6.6,1", entries, error));
+        "DSP,120000.000,1,1,6.6,0.001,55.0,120.0,10.0,45.0,1", entries, error));
     // 非法 active
     QVERIFY(!OrbitMessage::parseDeceptionFrame(
-        "DSP,120000.000,1,1,G,39.9,116.4,26560.0,2", entries, error));
+        "DSP,120000.000,1,1,26560.0,0.001,55.0,120.0,10.0,45.0,2", entries, error));
+    // 非法偏心率
+    QVERIFY(!OrbitMessage::parseDeceptionFrame(
+        "DSP,120000.000,1,1,26560.0,1.5,55.0,120.0,10.0,45.0,1", entries, error));
 }
 
 QTEST_APPLESS_MAIN(OrbitMessageTests)
