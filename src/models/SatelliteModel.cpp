@@ -332,7 +332,7 @@ void SatelliteModel::applyOrbitFrame(const OrbitMessage::Frame &frame)
     // 每帧只是历元/M0 推进）→ 原地更新，QML 不重建 delegate、
     // 轨道环不重新采样。轨道环是完整周期采样，形状与 M0 无关。=====
     bool sameSet = m_realOrbitMode
-                   && m_satellites.size() == frame.satellites.size();
+                   && m_orbCount == frame.satellites.size();
     bool shapeChanged = false;
     if (sameSet) {
         for (int i = 0; i < frame.satellites.size(); ++i) {
@@ -374,9 +374,14 @@ void SatelliteModel::applyOrbitFrame(const OrbitMessage::Frame &frame)
         return;
     }
 
+    // $DSP 欺骗卫星与 $ORB 星座独立，重建星座时必须保留
+    QVector<SatelliteData> deceptions;
+    for (const SatelliteData &d : m_satellites)
+        if (d.isDeception) deceptions.append(d);
+
     beginResetModel();
     m_satellites.clear();
-    m_satellites.reserve(frame.satellites.size());
+    m_satellites.reserve(frame.satellites.size() + deceptions.size());
 
     for (const OrbitMessage::Satellite &src : frame.satellites) {
         SatelliteData sat;
@@ -410,8 +415,11 @@ void SatelliteModel::applyOrbitFrame(const OrbitMessage::Frame &frame)
 
         m_satellites.append(sat);
     }
+    for (const SatelliteData &d : deceptions)
+        m_satellites.append(d);
     endResetModel();
 
+    m_orbCount = frame.satellites.size();
     m_realOrbitMode = true;
     updateDayRate(frame);
     m_frameWeek = frame.week;
@@ -426,6 +434,83 @@ void SatelliteModel::applyOrbitFrame(const OrbitMessage::Frame &frame)
 
     // 立即按新历元算一帧，避免界面出现"跳一下"
     updateSimulation(m_elapsedTime);
+}
+
+int SatelliteModel::deceptionCount() const
+{
+    int n = 0;
+    for (const SatelliteData &s : m_satellites)
+        if (s.isDeception) ++n;
+    return n;
+}
+
+void SatelliteModel::applyDeceptionFrame(
+    const QVector<OrbitMessage::DeceptionEntry> &entries)
+{
+    // $DSP 语义：全量声明当前激活的欺骗干扰源。
+    // 现有 $DSP 卫星中不在本帧里的 → 移除（干扰演示结束）。
+    bool changed = false;
+
+    // 更新/新增
+    for (const OrbitMessage::DeceptionEntry &e : entries) {
+        const QString name = QStringLiteral("DSP-%1").arg(e.index);
+        SatelliteData *existing = nullptr;
+        for (SatelliteData &s : m_satellites) {
+            if (s.isDeception && s.name == name) { existing = &s; break; }
+        }
+        const QColor color = QColor("#FF3333");
+        if (!existing) {
+            SatelliteData sat;
+            sat.isDeception = true;
+            sat.name = name;
+            sat.color = color;
+            sat.elements.color = color;
+            sat.elements.semiMajorAxis = e.altKm;
+            sat.elements.eccentricity = 0.0;
+            sat.elements.inclination = 0.0;
+            sat.elements.raan = e.lonDeg;       // 复用字段供轨道环生成
+
+            beginInsertRows(QModelIndex(), m_satellites.size(), m_satellites.size());
+            m_satellites.append(sat);
+            endInsertRows();
+            existing = &m_satellites.last();
+            changed = true;
+        }
+        // 位置与状态（场景轴约定: llaToCartesian 直接给场景坐标）
+        existing->position = OrbitalPhysics::llaToCartesian(
+            e.latDeg, e.lonDeg, e.altKm);
+        existing->latitude = e.latDeg;
+        existing->longitude = e.lonDeg;
+        existing->signalActive = e.active;
+        existing->visible = e.active;       // 波束开 = 卫星显示
+        existing->visualScale = 1.2;
+        changed = true;
+    }
+
+    // 移除不在本帧中的
+    for (int i = m_satellites.size() - 1; i >= 0; --i) {
+        const SatelliteData &s = m_satellites[i];
+        if (!s.isDeception) continue;
+        bool inFrame = false;
+        for (const OrbitMessage::DeceptionEntry &e : entries)
+            if (e.index == s.name.mid(4).toInt()) { inFrame = true; break; }
+        if (!inFrame) {
+            beginRemoveRows(QModelIndex(), i, i);
+            m_satellites.removeAt(i);
+            endRemoveRows();
+            changed = true;
+        }
+    }
+
+    if (changed) {
+        invalidateOrbitCache();
+        emit orbitPathsChanged();
+        emit dataChanged(createIndex(0, 0),
+                         createIndex(qMax(0, m_satellites.size() - 1), 0),
+                         {PositionRole, VisibleRole, ColorRole});
+        ++m_visibilityEpoch;
+        emit satellitesVisibilityChanged();
+    }
 }
 
 void SatelliteModel::syncSubpointsToPnt(double simTime)
@@ -489,6 +574,7 @@ void SatelliteModel::updateSimulation(double time)
         // 不能再做 GMST 旋转(重复扣地球自转, 曾致星下点错位 196°)。
         // 卫星始终出现在接收站半球, 与 2D 星下点一一对应。
         for (SatelliteData &sat : m_satellites) {
+            if (sat.isDeception) continue;   // 欺骗星由 $DSP 管理位置/可见性
             sat.visible = (sat.health == 0);   // 只显示参与定位的卫星
             OrbitMath::OrbitalElements el;
             el.semiMajorAxisKm = sat.elements.semiMajorAxis;
@@ -498,6 +584,7 @@ void SatelliteModel::updateSimulation(double time)
             el.argumentOfPerigeeDeg = sat.elements.argPerigee;
             el.trueAnomalyDeg = sat.elements.meanAnomaly;   // 见 applyOrbitFrame 的 M0→ν 转换
             try {
+                if (sat.isDeception) continue;
                 const OrbitMath::StateVector sv = OrbitMath::propagateKepler(el, elapsed);
                 // GPS 广播约定：帧根数的 Ω0 已对齐"周起始"，广播算法烧进
                 // -Ωe×tow(周内秒) —— 实测 tow=0 帧位置即真值、 tow>0 帧多转

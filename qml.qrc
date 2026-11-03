@@ -73,8 +73,6 @@
         <file>resources/qml/components/PreviewConfirmDialog.qml</file>
         <file>resources/qml/components/SceneViewOverlays.qml</file>
         <file>resources/qml/components/SatelliteInstancer.qml</file>
-        <file>resources/qml/components/FloatingBall.qml</file>
-        <file>resources/qml/components/OrbitConfigPanel.qml</file>
         <file>resources/qml/components/ParameterInput.qml</file>
         <file>resources/qml/components/MoonItem.qml</file>
         <file>resources/qml/components/GroundWarningItem.qml</file>

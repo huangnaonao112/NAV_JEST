@@ -240,6 +240,18 @@ void RackStatusClient::processLine(const QByteArray &line) {
         SCENE_LOG_CAT("ORB", QString("received %1 sats @ week %2 tow %3")
                       .arg(frame.satellites.size()).arg(frame.week)
                       .arg(frame.secondsOfWeek, 0, 'f', 1));
+    } else if (payload.startsWith("DSP,")) {
+        // DSP 欺骗干扰报文 → 报文驱动的干扰演示（替代轨道显示面板开关）
+        QVector<OrbitMessage::DeceptionEntry> entries;
+        QString err;
+        if (!OrbitMessage::parseDeceptionFrame(payload, entries, err)) {
+            SCENE_LOG_ERROR("DSP", QString("parse error: %1").arg(err));
+            emit logLine(QStringLiteral("RackStatusClient DSP parse error: %1").arg(err));
+            return;
+        }
+        if (m_satelliteModel)
+            m_satelliteModel->applyDeceptionFrame(entries);
+        SCENE_LOG_CAT("DSP", QString("applied %1 deception sources").arg(entries.size()));
     } else if (payload.startsWith("SAT,")) {
         // SAT 卫星星下点报文
         int count;

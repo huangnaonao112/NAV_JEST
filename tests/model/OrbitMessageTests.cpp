@@ -22,6 +22,8 @@ private slots:
     void rejectsTruncatedFrame();
     void rejectsNonOrbHead();
     void gpsToJ2000Conversion();
+    void parsesDeceptionFrame();
+    void rejectsBadDeceptionFrame();
 };
 
 void OrbitMessageTests::parsesValidFrame()
@@ -111,6 +113,40 @@ void OrbitMessageTests::gpsToJ2000Conversion()
     // J2000 对应 GPS 周 1042 的第 561600 秒（1042.93 周）
     QCOMPARE(OrbitMessage::gpsToSecondsSinceJ2000(1042, 561600.0), 0.0);
     QCOMPARE(OrbitMessage::gpsToSecondsSinceJ2000(1042, 0.0), -561600.0);
+}
+
+void OrbitMessageTests::parsesDeceptionFrame()
+{
+    const QByteArray payload =
+        "DSP,120000.000,2,"
+        "1,39.9,116.4,26560.0,1,"
+        "2,30.0,100.0,20000.0,0";
+    QVector<OrbitMessage::DeceptionEntry> entries;
+    QString error;
+    QVERIFY2(OrbitMessage::parseDeceptionFrame(payload, entries, error), qPrintable(error));
+    QCOMPARE(entries.size(), 2);
+    QCOMPARE(entries[0].index, 1);
+    QCOMPARE(entries[0].latDeg, 39.9);
+    QCOMPARE(entries[0].lonDeg, 116.4);
+    QCOMPARE(entries[0].altKm, 26560.0);
+    QVERIFY(entries[0].active);
+    QVERIFY(!entries[1].active);
+}
+
+void OrbitMessageTests::rejectsBadDeceptionFrame()
+{
+    OrbitMessage::Frame frame;
+    QString error;
+    // 数量与字段数不匹配
+    QVector<OrbitMessage::DeceptionEntry> entries;
+    QVERIFY(!OrbitMessage::parseDeceptionFrame(
+        "DSP,120000.000,2,1,39.9,116.4,26560.0,1", entries, error));
+    // 超范围高度（单位错）
+    QVERIFY(!OrbitMessage::parseDeceptionFrame(
+        "DSP,120000.000,1,1,G,39.9,116.4,6.6,1", entries, error));
+    // 非法 active
+    QVERIFY(!OrbitMessage::parseDeceptionFrame(
+        "DSP,120000.000,1,1,G,39.9,116.4,26560.0,2", entries, error));
 }
 
 QTEST_APPLESS_MAIN(OrbitMessageTests)

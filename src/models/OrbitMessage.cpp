@@ -131,6 +131,63 @@ bool parseOrbitFrame(const QByteArray &payload, Frame &out, QString &error)
     return true;
 }
 
+bool parseDeceptionFrame(const QByteArray &payload, QVector<DeceptionEntry> &out,
+                         QString &error)
+{
+    out.clear();
+    const QList<QByteArray> parts = payload.split(',');
+    // DSP,time,count + 5*count
+    if (parts.size() < 3) {
+        error = QStringLiteral("DSP frame requires at least 3 fields, got %1").arg(parts.size());
+        return false;
+    }
+    if (parts[0] != "DSP") {
+        error = QStringLiteral("expected DSP, got %1").arg(QString::fromUtf8(parts[0]));
+        return false;
+    }
+
+    int count = 0;
+    if (!parseInt(parts[2], count) || count < 0 || count > 32) {
+        error = QStringLiteral("bad deception count");
+        return false;
+    }
+    const int expected = 3 + count * 5;
+    if (parts.size() < expected) {
+        error = QStringLiteral("DSP frame requires %1 fields, got %2")
+                    .arg(expected).arg(parts.size());
+        return false;
+    }
+
+    for (int i = 0; i < count; ++i) {
+        const int base = 3 + i * 5;
+        DeceptionEntry e;
+        if (!parseInt(parts[base + 0], e.index) || e.index <= 0 || e.index > 16) {
+            error = QStringLiteral("bad index at entry %1").arg(i + 1);
+            return false;
+        }
+        if (!parseDouble(parts[base + 1], e.latDeg) || e.latDeg < -90.0 || e.latDeg > 90.0) {
+            error = QStringLiteral("bad latitude at entry %1").arg(i + 1);
+            return false;
+        }
+        if (!parseDouble(parts[base + 2], e.lonDeg) || e.lonDeg < -180.0 || e.lonDeg > 180.0) {
+            error = QStringLiteral("bad longitude at entry %1").arg(i + 1);
+            return false;
+        }
+        if (!parseDouble(parts[base + 3], e.altKm) || e.altKm < 100.0 || e.altKm > 60000.0) {
+            error = QStringLiteral("bad altitude at entry %1").arg(i + 1);
+            return false;
+        }
+        if (!parseInt(parts[base + 4], reinterpret_cast<int &>(e.active)) &&
+            parts[base + 4].trimmed() != "0" && parts[base + 4].trimmed() != "1") {
+            error = QStringLiteral("bad active flag at entry %1").arg(i + 1);
+            return false;
+        }
+        e.active = parts[base + 4].trimmed() == "1";
+        out.append(e);
+    }
+    return true;
+}
+
 double gpsToSecondsSinceJ2000(int week, double secondsOfWeek)
 {
     return double(week) * kSecondsPerWeek + secondsOfWeek - kGpsToJ2000Seconds;

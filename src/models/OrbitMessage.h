@@ -74,4 +74,21 @@ bool parseOrbitFrame(const QByteArray &payload, Frame &out, QString &error);
 /** @brief GPS 周内秒 → 距 J2000 的秒数（用于地球自转/ECI→ECEF） */
 double gpsToSecondsSinceJ2000(int week, double secondsOfWeek);
 
+// ================= $DSP 欺骗干扰报文 =================
+// $DSP,HHMMSS.mmm,count,idx,lat,lon,altKm,active[,...]
+// 控制欺骗干扰卫星：index 1-based；active=1 时卫星可见且干扰波束开启。
+// 全部展示由报文驱动（轨道显示面板已移除）。
+struct DeceptionEntry
+{
+    int index = 0;          // 1-based 欺骗卫星编号
+    double latDeg = 0.0;    // 星下点纬度 deg
+    double lonDeg = 0.0;    // 星下点经度 deg
+    double altKm = 0.0;     // 轨道半径（到地心）km
+    bool active = false;    // 干扰波束开关（=卫星可见性）
+};
+
+/** @brief 解析 $DSP 帧（payload 不含 '$' 与校验和） */
+bool parseDeceptionFrame(const QByteArray &payload,
+                         QVector<DeceptionEntry> &out, QString &error);
+
 } // namespace OrbitMessage

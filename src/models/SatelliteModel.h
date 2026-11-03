@@ -99,6 +99,13 @@ public:
 
     /// 应用一帧 $ORB 轨道参数（替代仿真星座，进入真实轨道模式）
     void applyOrbitFrame(const OrbitMessage::Frame &frame);
+
+    /// 应用一帧 $DSP 欺骗干扰参数（报文驱动的干扰演示）
+    void applyDeceptionFrame(const QVector<OrbitMessage::DeceptionEntry> &entries);
+
+    /// 欺骗卫星数量（$DSP 管理，独立于 $ORB 星座）
+    Q_PROPERTY(int deceptionCount READ deceptionCount NOTIFY satellitesVisibilityChanged)
+    int deceptionCount() const;
     Q_INVOKABLE void addSatellite(double a, double e, double i, double raan, double w, double m0, double n, QColor color, bool visible = true);
     Q_INVOKABLE void addDeceptionSatellite(double altitude, double lat, double lon, QColor color);
     Q_INVOKABLE void updateSatellite(int index, double a, double e, double i, double raan, double w, double m0, double n);
@@ -161,6 +168,7 @@ private:
     double m_lastDayDelta = 300.0;       // 上一帧间隔的日时间（外推上限用）
     double m_lastSubpointSync = -1.0;    // 2D 星下点上次同步的仿真时刻
     int m_visibilityEpoch = 0;           // health 翻转计数（QML 绑定重估触发器）
+    int m_orbCount = 0;                  // $ORB 星座的卫星数（欺骗星不计入，追加其后）
     double m_gmstDeg = 0.0;              // 真实模式当前 GMST（环整体旋转用）
 
     // 把当前星下点同步给 2D 地图（与 3D 同源，保证一一对应）
