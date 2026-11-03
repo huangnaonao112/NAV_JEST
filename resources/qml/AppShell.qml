@@ -748,6 +748,7 @@ Item {
     Component {
         id: simPage
         Item {
+            anchors.fill: parent   // 显式锚定，同 Map2DView 的 resize 教训
             property string currentView: root.simCurrentView
             property string currentScenario: root.simCurrentScenario
             
