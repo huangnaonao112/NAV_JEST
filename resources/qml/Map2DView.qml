@@ -11,18 +11,6 @@ Item {
     anchors.fill: parent
     clip: true
 
-    // 尺寸链诊断：本视图与父容器尺寸（定位"画布比窗口窄"这类问题）
-    function _logChain(tag) {
-        var pw = parent ? parent.width.toFixed(0) + "x" + parent.height.toFixed(0) : "?"
-        if (typeof SceneLogger !== "undefined")
-            SceneLogger.logQml("MAP2D", tag + " self=" + width.toFixed(0) + "x"
-                               + height.toFixed(0) + " parent=" + pw
-                               + " window=" + (root.window ? root.window.width + "x" + root.window.height : "?"))
-    }
-    Component.onCompleted: _logChain("init")
-    onWidthChanged: _logChain("w")
-    onHeightChanged: _logChain("h")
-
     // =========================================================================
     // 状态属性
     // =========================================================================
@@ -118,79 +106,6 @@ Item {
             while (map2DRoot.centerLon > 180) map2DRoot.centerLon -= 360;
             while (map2DRoot.centerLon < -180) map2DRoot.centerLon += 360;
             map2DRoot.centerLat = clampLat(map2DRoot.centerLat, map2DRoot.zoomLevel);
-        }
-    }
-
-    // 布局诊断浮层（NAVJEST_MAP_DEBUG=1 时显示；定位"瓦片铺不满"用）。
-    // 用 Timer 刷新 + try/catch，避免绑定求值异常导致整块文字为空。
-    property string _dbgText: "diagnostics..."
-
-    function _refreshDbg() {
-        try {
-            var t = tileMap
-            if (!t) { _dbgText = "tileMap: null"; return }
-            var winW = "?"
-            try {
-                if (map2DRoot.window) winW = map2DRoot.window.width + "x" + map2DRoot.window.height
-            } catch (e) { winW = "?" }
-            var par = parent ? parent.width.toFixed(0) + "x" + parent.height.toFixed(0) : "?"
-            var total = t.tilesX * t.tilesY
-            _dbgText = "window  " + winW
-                + "
-view    " + width.toFixed(0) + "x" + height.toFixed(0)
-                + "
-parent  " + par
-                + "
-tile    " + t.width.toFixed(0) + "x" + t.height.toFixed(0)
-                + "
-zoom    " + t.zoomContinuous.toFixed(3)
-                + "  eff " + t.zoomClamped.toFixed(3)
-                + "  minAll " + t.minZoomForWholeWorld.toFixed(3)
-                + "
-worldPx " + (t.tileSize * Math.pow(2, t.zoomClamped)).toFixed(0)
-                + "
-covered " + (t.tilesX * t.scaledTileSize).toFixed(0)
-                + "  grid " + t.tilesX + "x" + t.tilesY
-                + ((t.tilesX * t.scaledTileSize) + 0.5 < t.width ? "  UNDERFILL" : "  ok")
-                + "
-images  " + JSON.stringify(t.tileStats())
-        } catch (e) {
-            _dbgText = "diag error: " + e
-        }
-    }
-
-    Timer {
-        id: dbgTimer
-        interval: 500
-        // 默认常显（用户要求可在屏幕上直接截图取证）；批量生产时可改回
-        // running: typeof _mapDebug !== "undefined" && _mapDebug
-        running: true
-        repeat: true
-        triggeredOnStart: true
-        onTriggered: map2DRoot._refreshDbg()
-    }
-
-    Rectangle {
-        // 默认常显（诊断期）；外部想关闭时设 _mapDebug=false 的构建即可
-        visible: true
-        z: 9999
-        x: 12
-        y: 110
-        radius: 6
-        color: "#DD000000"
-        border.color: "#66FFFFFF"
-        border.width: 1
-        width: dbgText.implicitWidth + 16
-        height: dbgText.implicitHeight + 12
-
-        Text {
-            id: dbgText
-            x: 8
-            y: 6
-            color: "white"
-            font.pixelSize: 12
-            font.family: "Consolas"
-            text: map2DRoot._dbgText
         }
     }
 

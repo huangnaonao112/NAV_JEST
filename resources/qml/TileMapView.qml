@@ -71,11 +71,6 @@ Item {
         return u
     }
 
-    // 瓦片加载统计（诊断"布局满但画面空白/缺块"）
-    property int _readyCount: 0
-    property int _errorCount: 0
-    property string _lastErrorTile: ""
-
     readonly property int tileSize: 256
     // 渲染期硬保证：世界地图必须盖满视口，否则右侧/下方会露出应用底色
     // （"初始瓦片显示不完整"）。此前只在 _refitZoom 里抬 zoom，
@@ -185,7 +180,7 @@ Item {
         _initView()
     }
 
-    onWidthChanged: { Qt.callLater(_refitZoom); Qt.callLater(() => root._logState("resize")) }
+    onWidthChanged: Qt.callLater(_refitZoom)
     onHeightChanged: { Qt.callLater(_refitZoom) }
 
     // 属性级保险：视口变大导致"填满所需缩放"上升时，立刻抬升 zoomContinuous。
@@ -212,21 +207,14 @@ Item {
             centerLon = 0
             centerLat = 0
         }
-        _logState("refit")
         Qt.callLater(_checkBounds)
     }
 
-    // 诊断：视口尺寸 / 缩放 / 世界像素宽 / 网格覆盖。
-    // 若 worldPx < viewportW 即"世界地图盖不住视口"（右侧露底的根因）。
+    // 每会话一行健康日志：视口/缩放/覆盖。覆盖不足即"世界地图盖不住视口"
     function _logState(tag) {
-        const worldPx = tileSize * Math.pow(2, zoomClamped)
         const covered = tilesX * scaledTileSize
         const msg = tag + " viewport=" + width.toFixed(0) + "x" + height.toFixed(0)
-                    + " zoom=" + zoomContinuous.toFixed(3)
-                    + " eff=" + zoomClamped.toFixed(3)
-                    + " minAll=" + minZoomForWholeWorld.toFixed(3)
-                    + " worldPx=" + worldPx.toFixed(0)
-                    + " tiles=" + tilesX + "x" + tilesY
+                    + " zoom=" + zoomClamped.toFixed(3)
                     + " covered=" + covered.toFixed(0)
                     + (covered + 0.5 < width ? " ** UNDERFILL **" : " ok")
         if (typeof SceneLogger !== "undefined")
@@ -298,7 +286,6 @@ Item {
     }
 
     Repeater {
-        id: tileRepeater
         model: tilesX * tilesY
         delegate: Image {
             asynchronous: true
@@ -335,73 +322,6 @@ Item {
 
             source: yValid ? tileUrl(zInt, wx, ty) : ""
             visible: yValid
-            onStatusChanged: {
-                if (status === Image.Ready)
-                    root._readyCount++
-                else if (status === Image.Error) {
-                    root._errorCount++
-                    if (root._lastErrorTile === "")
-                        root._lastErrorTile = "z" + zInt + "/" + wx + "/" + ty
-                }
-            }
-        }
-    }
-
-    // 权威统计：遍历 Repeater 的实际 Image 项，报告状态与几何
-    function tileStats() {
-        var total = 0, ready = 0, loading = 0, err = 0, nul = 0
-        var missing = "", maxRight = -1e9, minLeft = 1e9, hidden = 0
-        for (var i = 0; i < tileRepeater.count; i++) {
-            var it = tileRepeater.itemAt(i)
-            if (!it) { total++; nul++; continue }
-            total++
-            if (it.status === Image.Ready) ready++
-            else if (it.status === Image.Error) { err++; if (!missing) missing = it.source }
-            else if (it.status === Image.Loading) loading++
-            else { nul++; if (!missing) missing = it.source }
-            if (!it.visible) hidden++
-            maxRight = Math.max(maxRight, it.x + it.width)
-            minLeft = Math.min(minLeft, it.x)
-        }
-        var geom = ""
-        for (var g = 0; g < Math.min(4, tileRepeater.count); g++) {
-            var gi = tileRepeater.itemAt(g)
-            if (gi) {
-                if (geom) geom += ","
-                geom += gi.x.toFixed(0) + "/" + gi.width.toFixed(0)
-                     + "/" + gi.height.toFixed(0) + "/" + (gi.visible ? "v" : "h")
-            }
-        }
-        return { total: total, ready: ready, loading: loading, err: err,
-                 nul: nul, missing: missing, maxRight: Math.round(maxRight),
-                 minLeft: Math.round(minLeft), hidden: hidden, geom: geom }
-    }
-
-    // 诊断：每秒记录瓦片加载情况（布局满但画面缺块时，这里会显示 error/未加载）
-    Timer {
-        interval: 1000
-        running: root.visible
-        repeat: true
-        onTriggered: {
-            var st
-            try { st = root.tileStats() } catch (e) {
-                if (typeof SceneLogger !== "undefined")
-                    SceneLogger.logQml("TILEMAP", "stats error: " + e)
-                return
-            }
-            if (true) {   // 诊断期：无条件记录（含 ready/maxRight），便于无截图取证
-                if (typeof SceneLogger !== "undefined")
-                    SceneLogger.logQml("TILEMAP",
-                        "images total=" + st.total + " ready=" + st.ready
-                        + " loading=" + st.loading + " err=" + st.err + " null=" + st.nul
-                        + " zoom=" + zoomClamped.toFixed(3)
-                        + " grid=" + tilesX + "x" + tilesY
-                        + " maxRight=" + st.maxRight + " hidden=" + st.hidden
-                        + " sTile=" + scaledTileSize.toFixed(1)
-                        + " topLeftX=" + topLeftTileX.toFixed(3)
-                        + " geom=" + st.geom
-                        + " firstMissing=" + (st.missing || "-"))
-            }
         }
     }
 
