@@ -157,7 +157,7 @@ public:
     // 回放轨迹：点已乘 DISTANCE_SCALE（空间 2），80 单位 ≈ 384 km 物理长度
     static constexpr double REPLAY_THICKNESS_UNITS = 80.0;
     // 月面轨迹：点坐标是月球局部 km（空间 1），30 km ≈ 1~2 px
-    static constexpr double MOON_TRAIL_THICKNESS_KM = 30.0;
+    static constexpr double MOON_TRAIL_THICKNESS_KM = 10.0;   // 月球车地面轨迹刷痕
 
     // ================= 访问器（QML 只读属性）=================
     double earthRadius() const { return EARTH_RADIUS; }
@@ -257,7 +257,7 @@ public:
      * 判据：线宽 / 轨迹包围盒对角线 ∈ [1e-5, 0.5]。
      * - 轨道环 40 / ~24000 ≈ 1.7e-3  ✓
      * - 回放轨迹 80 / ~60000 ≈ 1.3e-3 ✓
-     * - 月面 30 / ~3500 ≈ 8.6e-3     ✓
+     * - 月面 10 / ~3500 ≈ 2.9e-3     ✓
      * - 历史错误 0.4 / 24000 = 1.7e-5 ✗（过细，亚像素）
      * - 历史错误 30 / 35 = 0.86       ✗（过粗，巨带）
      */

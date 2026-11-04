@@ -39,11 +39,13 @@ Node {
                 thickness: CoordinateSystem.moonTrailThicknessKm * moonNode.lineWidthScale
             }
 
+            // 深度测试保持默认（勿设 NeverDepthDraw）：月球本体必须遮挡
+            // 背面半圈轨迹，否则整条轨迹穿透月体画出来，看起来像悬浮在
+            // 月球周围的光环——"月球车地面轨迹"的关键就是被月体正确遮挡
             materials: DefaultMaterial {
                 diffuseColor: "#FF0000"
                 lighting: DefaultMaterial.NoLighting
                 cullMode: DefaultMaterial.NoCulling
-                depthDrawMode: DefaultMaterial.NeverDepthDraw
             }
         }
     }
