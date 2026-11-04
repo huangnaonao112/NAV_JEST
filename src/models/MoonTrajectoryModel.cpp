@@ -82,38 +82,29 @@ QVariantList MoonTrajectoryModel::trajectoryPoints() const {
     return result;
 }
 
-// 最近轨迹点（末尾 RECENT_POINTS_LIMIT 个，供标记 Repeater 轻量绑定）
+// 当前位置信标（只暴露最新 1 个点，供标记 Repeater 绑定）。
+// 历史轨迹已由 MoonItem 的红色轨迹线完整呈现——此前沿轨道撒 60 个红盘
+// 标记 + 最新点双层无限波纹（扩散到 120km）+ 推流期整体每 0.3s 刷新，
+// 叠加成"环绕月球的红光一直闪"的视觉噪音（用户无法辨认其含义）。
+// 现在只保留一个小脉冲信标：轨迹看线、当前位置看脉冲，职责分明。
 QVariantList MoonTrajectoryModel::recentPoints() const {
     QMutexLocker locker(&m_trajectoryMutex);
 
-    const int count = m_trajectory.size();
-    const int start = qMax(0, count - RECENT_POINTS_LIMIT);
+    if (m_trajectory.isEmpty())
+        return {};
 
     QVariantList result;
-    result.reserve(count - start);
-    for (int i = start; i < count; ++i) {
-        const auto& point = m_trajectory[i];
-        QVariantMap item;
-        item["position"] = point.position;
-        item["lat"] = point.latitude;
-        item["lon"] = point.longitude;
-        item["name"] = QString("报文点%1").arg(i + 1);
-
-        const bool isLatest = (i == count - 1);
-        if (isLatest) {
-            item["type"] = 3;           // Trajectory 类型，波纹动画
-            item["radius"] = 120.0;
-            item["color"] = QColor("#FF0000");
-        } else {
-            item["type"] = 0;
-            item["radius"] = 60.0;
-            const double fadeFactor = static_cast<double>(i) / count;
-            const int redValue = 100 + static_cast<int>(155 * fadeFactor);
-            item["color"] = QColor(redValue, 0, 0);
-        }
-        item["errorRadius"] = 0.0;
-        result.append(item);
-    }
+    const auto& point = m_trajectory.last();
+    QVariantMap item;
+    item["position"] = point.position;
+    item["lat"] = point.latitude;
+    item["lon"] = point.longitude;
+    item["name"] = QStringLiteral("当前点");
+    item["type"] = 3;            // Trajectory 类型：波纹脉冲指示当前位置
+    item["radius"] = 40.0;       // 月球(1737km)的 ~2.3%，克制不抢视线
+    item["color"] = QColor("#FF0000");
+    item["errorRadius"] = 0.0;
+    result.append(item);
     return result;
 }
 

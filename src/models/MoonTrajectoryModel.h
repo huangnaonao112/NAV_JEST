@@ -63,7 +63,7 @@ class MoonTrajectoryModel : public QObject {
     // - QML 使用 Repeater3D + GroundWarningItem 渲染
     Q_PROPERTY(QVariantList trajectoryPoints READ trajectoryPoints NOTIFY trajectoryChanged)
 
-    // 最近轨迹点（轻量：只含末尾 RECENT_POINTS_LIMIT 个，供标记 Repeater 绑定，
+    // 当前位置信标（轻量：只含最新 1 个点，供标记 Repeater 绑定，
     // 避免万点级全量 QVariantList 重建）
     Q_PROPERTY(QVariantList recentPoints READ recentPoints NOTIFY trajectoryChanged)
     
@@ -96,7 +96,7 @@ public:
     // 轨迹点列表（用于QML）
     QVariantList trajectoryPoints() const;
 
-    // 最近轨迹点（末尾 RECENT_POINTS_LIMIT 个，轻量）
+    // 当前位置信标（最新 1 个点，轻量）
     QVariantList recentPoints() const;
     
     // 测试点列表（用于QML）
@@ -181,7 +181,6 @@ private:
     static constexpr int MAX_TRAJECTORY_POINTS = 10000;
 
     // 标记渲染上限：Repeater 只画最近 N 个点（全量历史仍在 m_trajectory）
-    static constexpr int RECENT_POINTS_LIMIT = 60;
 
     // 信号发射计数器（每10个点发射一次）
     int m_emitCounter = 0;
